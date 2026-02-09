@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, session, Menu, protocol, webContents } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, session, Menu, protocol, webContents, clipboard } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('url');
 const fs = require('fs');
@@ -6,6 +6,12 @@ const Store = require('electron-store');
 
 let tabDragBuffer = null;
 let tabDragClaimed = false;
+
+// Performance switches (desktop-focused)
+app.commandLine.appendSwitch('enable-gpu-rasterization');
+app.commandLine.appendSwitch('enable-zero-copy');
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+app.commandLine.appendSwitch('disable-background-timer-throttling');
 
 const projectUserDataDir = path.join(__dirname, 'userdata');
 if (!fs.existsSync(projectUserDataDir)) {
@@ -34,6 +40,186 @@ ipcMain.handle('create-window-with-tab', (_e, payload) => {
   createMainWindow({ isSecondary: true, initialUrl: url });
   return true;
 });
+
+function getOwnerWindowForContents(contents) {
+  try {
+    const host = contents && contents.hostWebContents ? contents.hostWebContents : null;
+    if (host) return BrowserWindow.fromWebContents(host);
+    return BrowserWindow.fromWebContents(contents);
+  } catch {
+    return null;
+  }
+}
+
+function sendToOwnerNewTab(contents, url) {
+  try {
+    const win = getOwnerWindowForContents(contents);
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('new-tab', url);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function buildContextMenu(contents, params) {
+  const template = [];
+
+  const win = getOwnerWindowForContents(contents);
+  const canGoBack = typeof contents.canGoBack === 'function' ? contents.canGoBack() : false;
+  const canGoForward = typeof contents.canGoForward === 'function' ? contents.canGoForward() : false;
+
+  const pageURL = params && params.pageURL ? String(params.pageURL) : '';
+  const linkURL = params && params.linkURL ? String(params.linkURL) : '';
+  const srcURL = params && params.srcURL ? String(params.srcURL) : '';
+  const selectionText = params && params.selectionText ? String(params.selectionText).trim() : '';
+  const isEditable = !!(params && params.isEditable);
+  const editFlags = (params && params.editFlags) || {};
+  const mediaType = params && params.mediaType ? String(params.mediaType) : '';
+
+  if (linkURL) {
+    template.push(
+      {
+        label: 'Open link in new tab',
+        click: () => sendToOwnerNewTab(contents, linkURL)
+      },
+      {
+        label: 'Open link in new tab (background)',
+        click: () => {
+          try {
+            const w = getOwnerWindowForContents(contents);
+            if (w && !w.isDestroyed()) {
+              w.webContents.send('new-tab-background', linkURL);
+              return;
+            }
+          } catch {
+            // ignore
+          }
+          sendToOwnerNewTab(contents, linkURL);
+        }
+      },
+      {
+        label: 'Open link in new window',
+        click: () => createMainWindow({ isSecondary: true, initialUrl: linkURL })
+      },
+      { type: 'separator' },
+      {
+        label: 'Copy link address',
+        role: 'copyLink'
+      },
+      {
+        label: 'Save link as...',
+        click: () => {
+          try { contents.downloadURL(linkURL); } catch (_) { /* ignore */ }
+        }
+      }
+    );
+    template.push({ type: 'separator' });
+  }
+
+  if (mediaType === 'image' && srcURL) {
+    template.push(
+      {
+        label: 'Open image in new tab',
+        click: () => sendToOwnerNewTab(contents, srcURL)
+      },
+      {
+        label: 'Copy image',
+        role: 'copyImage'
+      },
+      {
+        label: 'Copy image address',
+        role: 'copyImageAddress'
+      },
+      {
+        label: 'Save image as...',
+        click: () => {
+          try { contents.downloadURL(srcURL); } catch (_) { /* ignore */ }
+        }
+      }
+    );
+    template.push({ type: 'separator' });
+  }
+
+  if ((mediaType === 'video' || mediaType === 'audio') && srcURL) {
+    template.push(
+      {
+        label: mediaType === 'video' ? 'Open video in new tab' : 'Open audio in new tab',
+        click: () => sendToOwnerNewTab(contents, srcURL)
+      },
+      {
+        label: 'Save as...',
+        click: () => {
+          try { contents.downloadURL(srcURL); } catch (_) { /* ignore */ }
+        }
+      }
+    );
+    template.push({ type: 'separator' });
+  }
+
+  if (selectionText) {
+    const q = encodeURIComponent(selectionText);
+    template.push(
+      {
+        label: `Search Google for "${selectionText.length > 32 ? selectionText.slice(0, 32) + '…' : selectionText}"`,
+        click: () => sendToOwnerNewTab(contents, `https://www.google.com/search?q=${q}`)
+      },
+      { type: 'separator' }
+    );
+  }
+
+  if (isEditable) {
+    template.push(
+      { label: 'Undo', enabled: !!editFlags.canUndo, role: 'undo' },
+      { label: 'Redo', enabled: !!editFlags.canRedo, role: 'redo' },
+      { type: 'separator' },
+      { label: 'Cut', enabled: !!editFlags.canCut, role: 'cut' },
+      { label: 'Copy', enabled: !!editFlags.canCopy, role: 'copy' },
+      { label: 'Paste', enabled: !!editFlags.canPaste, role: 'paste' },
+      { label: 'Paste and match style', enabled: !!editFlags.canPaste, role: 'pasteAndMatchStyle' },
+      { type: 'separator' },
+      { label: 'Select all', role: 'selectAll' },
+      { type: 'separator' }
+    );
+  } else {
+    template.push(
+      { label: 'Back', enabled: canGoBack, click: () => { try { contents.goBack(); } catch (_) { /* ignore */ } } },
+      { label: 'Forward', enabled: canGoForward, click: () => { try { contents.goForward(); } catch (_) { /* ignore */ } } },
+      { label: 'Reload', click: () => { try { contents.reload(); } catch (_) { /* ignore */ } } },
+      { type: 'separator' },
+      { label: 'Copy', enabled: !!editFlags.canCopy || !!selectionText, role: 'copy' },
+      { label: 'Select all', role: 'selectAll' },
+      { type: 'separator' }
+    );
+  }
+
+  if (pageURL) {
+    template.push(
+      {
+        label: 'View page source',
+        click: () => sendToOwnerNewTab(contents, `view-source:${pageURL}`)
+      }
+    );
+  }
+
+  template.push(
+    { type: 'separator' },
+    {
+      label: 'Inspect',
+      click: () => {
+        try {
+          contents.openDevTools({ mode: 'detach' });
+          contents.inspectElement(params.x, params.y);
+        } catch (_) {
+          // ignore
+        }
+      }
+    }
+  );
+
+  const menu = Menu.buildFromTemplate(template);
+  return { menu, win };
+}
 
 let globalStore;
 function getGlobalStore() {
@@ -266,6 +452,7 @@ function createMainWindow(opts = {}) {
       webSecurity: true,
       allowRunningInsecureContent: false,
       experimentalFeatures: true,
+      backgroundThrottling: false,
       webviewTag: true
     }
   });
@@ -363,10 +550,34 @@ app.on('window-all-closed', () => {
 app.on('web-contents-created', (e, contents) => {
   // Handle new windows
   contents.setWindowOpenHandler(({ url }) => {
-    if (mainWindow) {
-      mainWindow.webContents.send('new-tab', url);
+    try {
+      const u = String(url || '');
+
+      // Allow DevTools to open normally (inspect uses this)
+      if (u.startsWith('devtools://') || u.startsWith('chrome-devtools://')) {
+        return { action: 'allow' };
+      }
+
+      // Route all other window.open/popups into a new tab in the *owning* window
+      if (u) {
+        sendToOwnerNewTab(contents, u);
+      }
+    } catch {
+      // ignore
     }
+
     return { action: 'deny' };
+  });
+
+  contents.on('context-menu', (_event, params) => {
+    try {
+      const { menu, win } = buildContextMenu(contents, params);
+      if (menu) {
+        menu.popup({ window: win || undefined });
+      }
+    } catch (err) {
+      // ignore
+    }
   });
 
   // Handle external links
@@ -477,6 +688,27 @@ ipcMain.handle('remove-bookmark', (e, id) => {
   const s = getProfileStore(profileId);
   let bookmarks = s.get(profileKey('bookmarks'), []);
   bookmarks = bookmarks.filter(b => b.id !== id);
+  s.set(profileKey('bookmarks'), bookmarks);
+  return bookmarks;
+});
+
+ipcMain.handle('update-bookmark', (e, bookmark) => {
+  const profileId = getCurrentProfileId();
+  const s = getProfileStore(profileId);
+  const bookmarks = s.get(profileKey('bookmarks'), []);
+
+  const id = bookmark && bookmark.id;
+  if (!id) return bookmarks;
+
+  const idx = bookmarks.findIndex(b => b.id === id);
+  if (idx === -1) return bookmarks;
+
+  const next = {
+    ...bookmarks[idx],
+    ...bookmark,
+    updatedAt: new Date().toISOString()
+  };
+  bookmarks[idx] = next;
   s.set(profileKey('bookmarks'), bookmarks);
   return bookmarks;
 });

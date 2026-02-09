@@ -32,7 +32,36 @@ class BrowserController {
     this._tabDragOverId = null;
     this._tabDragDidDropInThisWindow = false;
 
+    this._persistSessionTabsTimer = null;
+    this._historyTabReloadTimer = null;
+
+    this._bookmarkEditor = null;
+
     this.init();
+  }
+
+  extractUrlFromDataTransfer(dt) {
+    try {
+      if (!dt) return null;
+      const uriList = dt.getData('text/uri-list');
+      if (uriList) {
+        const first = uriList.split(/\r?\n/).find(l => l && !l.startsWith('#'));
+        if (first) return first.trim();
+      }
+      const plain = dt.getData('text/plain');
+      if (plain && plain.trim()) return plain.trim();
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  normalizeDroppedUrl(u) {
+    if (!u || typeof u !== 'string') return null;
+    const url = u.trim();
+    if (!url) return null;
+    if (url.startsWith('javascript:')) return null;
+    return url;
   }
 
   sanitizeSessionUrl(url) {
@@ -122,15 +151,41 @@ class BrowserController {
     this.createTab('blynx://newtab');
   }
 
-  async persistSessionTabs() {
+  persistSessionTabs() {
     try {
-      const urls = this.tabs
-        .map(t => t.displayUrl || t.url)
-        .filter(u => typeof u === 'string' && u.length > 0);
-      await window.electronAPI.profileStoreSet('session.tabs', urls);
+      if (this._persistSessionTabsTimer) {
+        clearTimeout(this._persistSessionTabsTimer);
+      }
+
+      this._persistSessionTabsTimer = setTimeout(() => {
+        try {
+          const urls = this.tabs
+            .map(t => t.displayUrl || t.url)
+            .filter(u => typeof u === 'string' && u.length > 0);
+          // Fire-and-forget to avoid blocking UI
+          window.electronAPI.profileStoreSet('session.tabs', urls);
+        } catch (e) {
+          console.error('Failed to persist session tabs:', e);
+        }
+      }, 500);
     } catch (e) {
-      console.error('Failed to persist session tabs:', e);
+      console.error('Failed to schedule persist session tabs:', e);
     }
+  }
+
+  scheduleHistoryTabReload() {
+    if (this._historyTabReloadTimer) return;
+    this._historyTabReloadTimer = setTimeout(() => {
+      this._historyTabReloadTimer = null;
+      try {
+        const historyTab = this.tabs.find(t => t.displayUrl === 'blynx://history' || t.url === 'blynx://history');
+        if (historyTab && historyTab.webview) {
+          historyTab.webview.reload();
+        }
+      } catch (_) {
+        // ignore
+      }
+    }, 1000);
   }
 
   async init() {
@@ -246,6 +301,70 @@ class BrowserController {
       }
     });
 
+    // Drag/drop links onto bookmark bar to create bookmarks
+    this.bookmarkBar.addEventListener('dragover', (e) => {
+      const u = this.normalizeDroppedUrl(this.extractUrlFromDataTransfer(e.dataTransfer));
+      if (u) e.preventDefault();
+    });
+    this.bookmarkBar.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      const u = this.normalizeDroppedUrl(this.extractUrlFromDataTransfer(e.dataTransfer));
+      if (!u) return;
+      await window.electronAPI.addBookmark({
+        title: u,
+        url: u
+      });
+      await this.renderBookmarkBar();
+    });
+
+    // Bookmark bar context menu (empty area) for add/edit
+    this.bookmarkBar.addEventListener('contextmenu', async (e) => {
+      const isOnItem = !!e.target.closest('.bookmark-item');
+      if (isOnItem) return;
+      e.preventDefault();
+
+      const tab = this.tabs.find(t => t.id === this.activeTabId);
+      const currentUrl = tab ? (tab.displayUrl || tab.url) : '';
+      if (!currentUrl || currentUrl.startsWith('blynx://')) return;
+
+      let existing = null;
+      try {
+        const bookmarks = await window.electronAPI.getBookmarks();
+        existing = bookmarks.find(b => b.url === currentUrl) || null;
+      } catch {
+        // ignore
+      }
+
+      this.ensureBookmarkContextMenu();
+      this.bookmarkContextMenu.innerHTML = '';
+
+      if (existing) {
+        this.addBookmarkContextMenuItem('Edit bookmark', () => this.showBookmarkEditor({
+          mode: 'edit',
+          bookmark: existing
+        }));
+      } else {
+        this.addBookmarkContextMenuItem('Add bookmark', () => this.showBookmarkEditor({
+          mode: 'add',
+          bookmark: {
+            title: tab && tab.title ? tab.title : currentUrl,
+            url: currentUrl
+          }
+        }));
+      }
+
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      this.bookmarkContextMenu.style.left = '0px';
+      this.bookmarkContextMenu.style.top = '0px';
+      this.bookmarkContextMenu.style.display = 'block';
+      const rect = this.bookmarkContextMenu.getBoundingClientRect();
+      const left = Math.min(e.clientX, vw - rect.width - 8);
+      const top = Math.min(e.clientY, vh - rect.height - 8);
+      this.bookmarkContextMenu.style.left = left + 'px';
+      this.bookmarkContextMenu.style.top = top + 'px';
+    });
+
     this.urlInput.addEventListener('focus', () => {
       this.urlInput.select();
     });
@@ -335,7 +454,14 @@ class BrowserController {
 
     // Allow dropping a dragged tab into this window's tab strip
     this.tabsContainer.addEventListener('dragover', (e) => {
-      if (!this.draggingTabId) return;
+      if (!this.draggingTabId) {
+        // Allow dropping links to open a new tab
+        const u = this.normalizeDroppedUrl(this.extractUrlFromDataTransfer(e.dataTransfer));
+        if (u) {
+          e.preventDefault();
+        }
+        return;
+      }
       e.preventDefault();
       const over = e.target.closest('.tab');
       this._tabDragOverId = over ? Number(over.dataset.tabId) : null;
@@ -437,6 +563,12 @@ class BrowserController {
     window.electronAPI.onNewTab((url) => {
       this.createTab(url);
     });
+
+    if (window.electronAPI.onNewTabBackground) {
+      window.electronAPI.onNewTabBackground((url) => {
+        this.createTab(url, false);
+      });
+    }
 
     window.electronAPI.onCloseCurrentTab(() => {
       this.closeCurrentTab();
@@ -656,6 +788,10 @@ class BrowserController {
 
     this.bookmarkContextMenu.innerHTML = '';
     this.addBookmarkContextMenuItem('Open in new tab', () => this.createTab(bookmark.url));
+    this.addBookmarkContextMenuItem('Edit', () => this.showBookmarkEditor({
+      mode: 'edit',
+      bookmark
+    }));
     this.addBookmarkContextMenuItem('Copy link', async () => {
       try {
         await navigator.clipboard.writeText(bookmark.url);
@@ -682,6 +818,108 @@ class BrowserController {
     const top = Math.min(y, vh - rect.height - 8);
     this.bookmarkContextMenu.style.left = left + 'px';
     this.bookmarkContextMenu.style.top = top + 'px';
+  }
+
+  ensureBookmarkEditor() {
+    if (this._bookmarkEditor) return;
+
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed';
+    overlay.style.left = '0';
+    overlay.style.top = '0';
+    overlay.style.right = '0';
+    overlay.style.bottom = '0';
+    overlay.style.zIndex = '3000';
+    overlay.style.display = 'none';
+    overlay.style.background = 'rgba(0,0,0,0.35)';
+
+    const modal = document.createElement('div');
+    modal.style.position = 'absolute';
+    modal.style.left = '50%';
+    modal.style.top = '50%';
+    modal.style.transform = 'translate(-50%, -50%)';
+    modal.style.width = '420px';
+    modal.style.maxWidth = 'calc(100vw - 40px)';
+    modal.style.background = 'var(--bg-secondary)';
+    modal.style.border = '1px solid var(--bg-tertiary)';
+    modal.style.borderRadius = '10px';
+    modal.style.boxShadow = '0 8px 30px rgba(0,0,0,0.45)';
+    modal.style.padding = '14px';
+
+    modal.innerHTML = `
+      <div style="font-size:14px;font-weight:600;margin-bottom:10px;">Bookmark</div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <label style="font-size:12px;color:var(--text-secondary);">Name</label>
+        <input id="blynxBookmarkName" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--bg-tertiary);background:var(--bg-primary);color:var(--text-primary);" />
+        <label style="font-size:12px;color:var(--text-secondary);">URL</label>
+        <input id="blynxBookmarkUrl" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--bg-tertiary);background:var(--bg-primary);color:var(--text-primary);" />
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;">
+        <button id="blynxBookmarkCancel" style="padding:9px 12px;border-radius:8px;border:1px solid var(--bg-tertiary);background:transparent;color:var(--text-primary);">Cancel</button>
+        <button id="blynxBookmarkSave" style="padding:9px 12px;border-radius:8px;border:none;background:var(--accent);color:#fff;">Save</button>
+      </div>
+    `;
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        overlay.style.display = 'none';
+      }
+    });
+
+    this._bookmarkEditor = overlay;
+  }
+
+  showBookmarkEditor({ mode, bookmark }) {
+    this.ensureBookmarkEditor();
+    const overlay = this._bookmarkEditor;
+    const nameEl = overlay.querySelector('#blynxBookmarkName');
+    const urlEl = overlay.querySelector('#blynxBookmarkUrl');
+    const cancelBtn = overlay.querySelector('#blynxBookmarkCancel');
+    const saveBtn = overlay.querySelector('#blynxBookmarkSave');
+
+    nameEl.value = bookmark && bookmark.title ? String(bookmark.title) : '';
+    urlEl.value = bookmark && bookmark.url ? String(bookmark.url) : '';
+
+    const cleanup = () => {
+      cancelBtn.onclick = null;
+      saveBtn.onclick = null;
+    };
+
+    cancelBtn.onclick = () => {
+      cleanup();
+      overlay.style.display = 'none';
+    };
+
+    saveBtn.onclick = async () => {
+      const title = String(nameEl.value || '').trim();
+      const url = String(urlEl.value || '').trim();
+      if (!title || !url) return;
+
+      try {
+        if (mode === 'edit' && bookmark && bookmark.id) {
+          await window.electronAPI.updateBookmark({
+            id: bookmark.id,
+            title,
+            url
+          });
+        } else {
+          await window.electronAPI.addBookmark({ title, url });
+        }
+      } catch (e) {
+        console.error('Failed to save bookmark:', e);
+      }
+
+      cleanup();
+      overlay.style.display = 'none';
+      await this.renderBookmarkBar();
+    };
+
+    overlay.style.display = 'block';
+    nameEl.focus();
+    nameEl.select();
   }
 
   createTab(url = 'blynx://newtab', activate = true) {
@@ -751,6 +989,21 @@ class BrowserController {
       if (!e.target.closest('.tab-close')) {
         this.activateTab(tab.id);
       }
+    });
+
+    // Drop a URL on a tab to navigate that tab
+    div.addEventListener('dragover', (e) => {
+      if (this.draggingTabId) return;
+      const u = this.normalizeDroppedUrl(this.extractUrlFromDataTransfer(e.dataTransfer));
+      if (u) e.preventDefault();
+    });
+    div.addEventListener('drop', (e) => {
+      if (this.draggingTabId) return;
+      const u = this.normalizeDroppedUrl(this.extractUrlFromDataTransfer(e.dataTransfer));
+      if (!u) return;
+      e.preventDefault();
+      this.activateTab(tab.id);
+      this.loadUrlInTab(tab.id, u);
     });
 
     // Close button
@@ -901,15 +1154,6 @@ class BrowserController {
       this.handleFaviconUpdate(tabId, e.favicons[0]);
     });
 
-    webview.addEventListener('new-window', (e) => {
-      // Prevent Electron from attempting to create a guest window that can end up blank
-      if (e && typeof e.preventDefault === 'function') e.preventDefault();
-      const targetUrl = e && (e.url || e.targetUrl);
-      if (targetUrl) {
-        this.createTab(targetUrl);
-      }
-    });
-
     webview.addEventListener('context-menu', (e) => {
       // Handle context menu
     });
@@ -1029,22 +1273,6 @@ class BrowserController {
       this.updateReloadButton(false);
     }
 
-    // Add to history
-    const webview = this.webviewContainer.querySelector(`[data-tab-id="${tabId}"]`);
-    if (webview) {
-      webview.executeJavaScript('document.title', false).then(title => {
-        window.electronAPI.addHistory({
-          url: tab.url,
-          title: title || tab.url
-        });
-
-        const historyTab = this.tabs.find(t => t.displayUrl === 'blynx://history' || t.url === 'blynx://history');
-        if (historyTab && historyTab.webview) {
-          historyTab.webview.reload();
-        }
-      });
-    }
-
     // Update navigation state
     this.updateNavigationState(tabId);
   }
@@ -1140,10 +1368,7 @@ class BrowserController {
           title: tab.title || u
         });
 
-        const historyTab = this.tabs.find(t => t.displayUrl === 'blynx://history' || t.url === 'blynx://history');
-        if (historyTab && historyTab.webview) {
-          historyTab.webview.reload();
-        }
+        this.scheduleHistoryTabReload();
       }
     }
 

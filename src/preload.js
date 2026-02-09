@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getBookmarks: () => ipcRenderer.invoke('get-bookmarks'),
   addBookmark: (bookmark) => ipcRenderer.invoke('add-bookmark', bookmark),
   removeBookmark: (id) => ipcRenderer.invoke('remove-bookmark', id),
+  updateBookmark: (bookmark) => ipcRenderer.invoke('update-bookmark', bookmark),
 
   // History
   getHistory: () => ipcRenderer.invoke('get-history'),
@@ -53,6 +54,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Event listeners
   onNewTab: (callback) => ipcRenderer.on('new-tab', (e, url) => callback(url)),
+  onNewTabBackground: (callback) => ipcRenderer.on('new-tab-background', (e, url) => callback(url)),
   onCloseCurrentTab: (callback) => ipcRenderer.on('close-current-tab', callback),
   onReloadCurrentTab: (callback) => ipcRenderer.on('reload-current-tab', callback),
   onForceReloadCurrentTab: (callback) => ipcRenderer.on('force-reload-current-tab', callback),
