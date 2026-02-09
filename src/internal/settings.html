@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings - Blynx</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: #202124;
+      color: #e8eaed;
+      min-height: 100vh;
+    }
+
+    .header {
+      background: #292a2d;
+      padding: 20px 40px;
+      border-bottom: 1px solid #35363a;
+    }
+
+    .header h1 {
+      font-size: 24px;
+      font-weight: 400;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header h1 svg {
+      width: 28px;
+      height: 28px;
+      color: #8ab4f8;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 40px;
+    }
+
+    .settings-section {
+      background: #292a2d;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+
+    .settings-section h2 {
+      font-size: 18px;
+      font-weight: 500;
+      margin-bottom: 20px;
+      color: #8ab4f8;
+    }
+
+    .setting-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 0;
+      border-bottom: 1px solid #35363a;
+    }
+
+    .setting-item:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+
+    .setting-item:first-child {
+      padding-top: 0;
+    }
+
+    .setting-info h3 {
+      font-size: 14px;
+      font-weight: 400;
+      margin-bottom: 4px;
+    }
+
+    .setting-info p {
+      font-size: 12px;
+      color: #9aa0a6;
+    }
+
+    .toggle {
+      width: 48px;
+      height: 24px;
+      background: #5f6368;
+      border-radius: 12px;
+      position: relative;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+
+    .toggle.active {
+      background: #8ab4f8;
+    }
+
+    .toggle::after {
+      content: '';
+      width: 20px;
+      height: 20px;
+      background: white;
+      border-radius: 50%;
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      transition: transform 0.3s ease;
+    }
+
+    .toggle.active::after {
+      transform: translateX(24px);
+    }
+
+    .input-field {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .input-field input {
+      padding: 8px 12px;
+      border: 1px solid #5f6368;
+      background: #35363a;
+      color: #e8eaed;
+      border-radius: 6px;
+      font-size: 13px;
+      outline: none;
+      width: 200px;
+    }
+
+    .input-field input:focus {
+      border-color: #8ab4f8;
+    }
+
+    .btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-primary {
+      background: #8ab4f8;
+      color: #202124;
+    }
+
+    .btn-primary:hover {
+      background: #9bbffd;
+    }
+
+    .btn-danger {
+      background: #f28b82;
+      color: #202124;
+    }
+
+    .btn-danger:hover {
+      background: #f5a29b;
+    }
+
+    .btn-secondary {
+      background: #35363a;
+      color: #e8eaed;
+    }
+
+    .btn-secondary:hover {
+      background: #3c4043;
+    }
+
+    .action-buttons {
+      display: flex;
+      gap: 12px;
+    }
+
+    select {
+      padding: 8px 12px;
+      border: 1px solid #5f6368;
+      background: #35363a;
+      color: #e8eaed;
+      border-radius: 6px;
+      font-size: 13px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    select:focus {
+      border-color: #8ab4f8;
+    }
+
+    .status {
+      font-size: 12px;
+      color: #81c995;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+        <circle cx="12" cy="12" r="3"/>
+      </svg>
+      Settings
+    </h1>
+  </div>
+
+  <div class="container">
+    <div class="settings-section">
+      <h2>General</h2>
+      <div class="setting-item">
+        <div class="setting-info">
+          <h3>Homepage</h3>
+          <p>Set your preferred homepage URL</p>
+        </div>
+        <div class="input-field">
+          <input type="text" id="homepageInput" value="blynx://newtab" placeholder="Enter URL">
+          <button class="btn btn-primary" onclick="saveHomepage()">Save</button>
+        </div>
+      </div>
+      <div class="setting-item">
+        <div class="setting-info">
+          <h3>On startup</h3>
+          <p>Restore the tabs you had open last time</p>
+        </div>
+        <div class="toggle" id="restoreSessionToggle" onclick="toggleSetting(this, 'restoreSession')"></div>
+      </div>
+      <div class="setting-item">
+        <div class="setting-info">
+          <h3>Search Engine</h3>
+          <p>Choose your default search engine</p>
+        </div>
+        <select id="searchEngine">
+          <option value="google">Google</option>
+          <option value="bing">Bing</option>
+          <option value="duckduckgo">DuckDuckGo</option>
+          <option value="yahoo">Yahoo</option>
+          <option value="brave">Brave Search</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h2>Profiles</h2>
+      <div class="setting-item">
+        <div class="setting-info">
+          <h3>Current profile</h3>
+          <p>Separate logins, cookies, bookmarks, and history per profile</p>
+        </div>
+        <div class="input-field">
+          <select id="profileSelect"></select>
+          <button class="btn btn-secondary" onclick="switchProfile()">Switch</button>
+        </div>
+      </div>
+      <div class="setting-item">
+        <div class="setting-info">
+          <h3>Create new profile</h3>
+          <p>Add another profile like Chrome's "Person 1"</p>
+        </div>
+        <div class="input-field">
+          <input type="text" id="newProfileName" placeholder="Profile name">
+          <button class="btn btn-primary" onclick="createProfile()">Create</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h2>Appearance</h2>
+      <div class="setting-item">
+        <div class="setting-info">
+          <h3>Dark Theme</h3>
+          <p>Use dark theme for browser interface</p>
+        </div>
+        <div class="toggle active" id="darkThemeToggle" onclick="toggleSetting(this, 'darkTheme')"></div>
+      </div>
+      <div class="setting-item">
+        <div class="setting-info">
+          <h3>Show Bookmarks Bar</h3>
+          <p>Display bookmarks bar below the address bar</p>
+        </div>
+        <div class="toggle" id="bookmarksBarToggle" onclick="toggleSetting(this, 'showBookmarksBar')"></div>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h2>Privacy & Security</h2>
+      <div class="setting-item">
+        <div class="setting-info">
+          <h3>Clear browsing data on exit</h3>
+          <p>Automatically clear history, cookies, and cache when closing</p>
+        </div>
+        <div class="toggle" id="clearOnExitToggle" onclick="toggleSetting(this, 'clearOnExit')"></div>
+      </div>
+      <div class="setting-item">
+        <div class="setting-info">
+          <h3>Block third-party cookies</h3>
+          <p>Prevent websites from storing tracking cookies</p>
+        </div>
+        <div class="toggle active" id="blockCookiesToggle" onclick="toggleSetting(this, 'blockThirdPartyCookies')"></div>
+      </div>
+      <div class="setting-item">
+        <div class="setting-info">
+          <h3>Clear Data Now</h3>
+          <p>Clear all browsing data immediately</p>
+        </div>
+        <div class="action-buttons">
+          <button class="btn btn-danger" onclick="clearAllData()">Clear All Data</button>
+          <button class="btn btn-secondary" onclick="clearHistory()">Clear History Only</button>
+        </div>
+      </div>
+      <div class="setting-item">
+        <div id="clearStatus" class="status"></div>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h2>Performance</h2>
+      <div class="setting-item">
+        <div class="setting-info">
+          <h3>Hardware Acceleration</h3>
+          <p>Use GPU for rendering when available</p>
+        </div>
+        <div class="toggle active" id="hwAccelToggle" onclick="toggleSetting(this, 'hardwareAcceleration')"></div>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h2>About</h2>
+      <div class="setting-item">
+        <div class="setting-info">
+          <h3>Blynx Browser</h3>
+          <p>Version 1.0.0 (Chromium-based)</p>
+          <p style="margin-top: 4px;">Built with Electron v28.0.0</p>
+        </div>
+        <button class="btn btn-secondary" onclick="checkUpdates()">Check for Updates</button>
+      </div>
+      <div class="setting-item">
+        <div id="updateStatus" class="status"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Load settings
+    async function loadSettings() {
+      try {
+        if (window.electronAPI) {
+          const homepage = await window.electronAPI.storeGet('homePage', 'blynx://newtab');
+          document.getElementById('homepageInput').value = homepage;
+
+          const darkTheme = await window.electronAPI.storeGet('darkTheme', true);
+          document.getElementById('darkThemeToggle').classList.toggle('active', darkTheme);
+
+          const showBookmarksBar = await window.electronAPI.storeGet('showBookmarksBar', true);
+          document.getElementById('bookmarksBarToggle').classList.toggle('active', showBookmarksBar);
+
+          const clearOnExit = await window.electronAPI.storeGet('clearOnExit', false);
+          document.getElementById('clearOnExitToggle').classList.toggle('active', clearOnExit);
+
+          const blockCookies = await window.electronAPI.storeGet('blockThirdPartyCookies', true);
+          document.getElementById('blockCookiesToggle').classList.toggle('active', blockCookies);
+
+          const hwAccel = await window.electronAPI.storeGet('hardwareAcceleration', true);
+          document.getElementById('hwAccelToggle').classList.toggle('active', hwAccel);
+
+          const searchEngine = await window.electronAPI.storeGet('searchEngine', 'google');
+          document.getElementById('searchEngine').value = searchEngine;
+
+          const restoreSession = await window.electronAPI.storeGet('restoreSession', false);
+          document.getElementById('restoreSessionToggle').classList.toggle('active', restoreSession);
+
+          await loadProfiles();
+        }
+      } catch (e) {
+        console.log('Settings loaded with defaults');
+      }
+    }
+
+    async function loadProfiles() {
+      try {
+        const profiles = await window.electronAPI.profilesList();
+        const current = await window.electronAPI.profilesCurrent();
+        const select = document.getElementById('profileSelect');
+        select.innerHTML = profiles
+          .map(p => `<option value="${p.id}">${p.name}</option>`)
+          .join('');
+        select.value = current;
+      } catch (e) {
+        console.error('Failed to load profiles:', e);
+      }
+    }
+
+    async function switchProfile() {
+      const profileId = document.getElementById('profileSelect').value;
+      try {
+        await window.electronAPI.profilesSwitch(profileId);
+      } catch (e) {
+        console.error('Failed to switch profile:', e);
+      }
+    }
+
+    async function createProfile() {
+      const name = document.getElementById('newProfileName').value.trim();
+      try {
+        await window.electronAPI.profilesCreate(name);
+        document.getElementById('newProfileName').value = '';
+        await loadProfiles();
+      } catch (e) {
+        console.error('Failed to create profile:', e);
+      }
+    }
+
+    async function toggleSetting(element, key) {
+      const active = element.classList.toggle('active');
+      try {
+        if (window.electronAPI) {
+          await window.electronAPI.storeSet(key, active);
+          // Notify main window of the change
+          window.electronAPI.notifySettingChanged(key, active);
+        }
+      } catch (e) {
+        console.error('Failed to save setting:', e);
+      }
+    }
+
+    async function saveHomepage() {
+      const value = document.getElementById('homepageInput').value;
+      try {
+        if (window.electronAPI) {
+          await window.electronAPI.storeSet('homePage', value);
+          if (window.electronAPI.notifySettingChanged) {
+            window.electronAPI.notifySettingChanged('homePage', value);
+          }
+          showStatus('homepage', 'Homepage saved successfully!');
+        }
+      } catch (e) {
+        console.error('Failed to save homepage:', e);
+      }
+    }
+
+    document.getElementById('searchEngine').addEventListener('change', async (e) => {
+      try {
+        if (window.electronAPI) {
+          await window.electronAPI.storeSet('searchEngine', e.target.value);
+          // Notify main window of the change
+          window.electronAPI.notifySettingChanged('searchEngine', e.target.value);
+        }
+      } catch (e) {
+        console.error('Failed to save search engine:', e);
+      }
+    });
+
+    async function clearAllData() {
+      if (!confirm('Are you sure you want to clear all browsing data? This cannot be undone.')) {
+        return;
+      }
+      try {
+        if (window.electronAPI) {
+          await window.electronAPI.clearStorageData();
+          await window.electronAPI.clearHistory();
+          showStatus('clearStatus', 'All browsing data cleared!');
+        }
+      } catch (e) {
+        console.error('Failed to clear data:', e);
+      }
+    }
+
+    async function clearHistory() {
+      if (!confirm('Clear all browsing history?')) {
+        return;
+      }
+      try {
+        if (window.electronAPI) {
+          await window.electronAPI.clearHistory();
+          showStatus('clearStatus', 'History cleared!');
+        }
+      } catch (e) {
+        console.error('Failed to clear history:', e);
+      }
+    }
+
+    function checkUpdates() {
+      const status = document.getElementById('updateStatus');
+      status.textContent = 'Checking for updates...';
+      setTimeout(() => {
+        status.textContent = 'Blynx is up to date!';
+      }, 1500);
+    }
+
+    function showStatus(elementId, message) {
+      const el = document.getElementById(elementId);
+      el.textContent = message;
+      setTimeout(() => {
+        el.textContent = '';
+      }, 3000);
+    }
+
+    loadSettings();
+  </script>
+</body>
+</html>

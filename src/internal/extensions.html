@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Extensions - Blynx</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: #202124;
+      color: #e8eaed;
+      min-height: 100vh;
+    }
+
+    .header {
+      background: #292a2d;
+      padding: 20px 40px;
+      border-bottom: 1px solid #35363a;
+    }
+
+    .header h1 {
+      font-size: 24px;
+      font-weight: 400;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header h1 svg {
+      width: 28px;
+      height: 28px;
+      color: #fdd663;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 40px;
+    }
+
+    .extensions-info {
+      background: linear-gradient(135deg, #35363a 0%, #292a2d 100%);
+      border-radius: 16px;
+      padding: 40px;
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .extensions-info svg {
+      width: 80px;
+      height: 80px;
+      color: #fdd663;
+      margin-bottom: 24px;
+    }
+
+    .extensions-info h2 {
+      font-size: 24px;
+      font-weight: 400;
+      margin-bottom: 12px;
+    }
+
+    .extensions-info p {
+      font-size: 15px;
+      color: #9aa0a6;
+      max-width: 500px;
+      margin: 0 auto 24px;
+      line-height: 1.6;
+    }
+
+    .extensions-info .note {
+      font-size: 13px;
+      color: #8ab4f8;
+      background: rgba(138, 180, 248, 0.1);
+      padding: 12px 20px;
+      border-radius: 8px;
+      display: inline-block;
+    }
+
+    .installed-extensions {
+      margin-bottom: 40px;
+    }
+
+    .section-title {
+      font-size: 18px;
+      font-weight: 500;
+      margin-bottom: 20px;
+      color: #e8eaed;
+    }
+
+    .extension-list {
+      background: #292a2d;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .extension-item {
+      display: flex;
+      align-items: center;
+      padding: 20px;
+      border-bottom: 1px solid #35363a;
+    }
+
+    .extension-item:last-child {
+      border-bottom: none;
+    }
+
+    .extension-icon {
+      width: 48px;
+      height: 48px;
+      background: linear-gradient(135deg, #8ab4f8 0%, #81c995 100%);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-right: 20px;
+      flex-shrink: 0;
+    }
+
+    .extension-icon svg {
+      width: 24px;
+      height: 24px;
+      color: #202124;
+    }
+
+    .extension-info {
+      flex: 1;
+    }
+
+    .extension-name {
+      font-size: 16px;
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+
+    .extension-description {
+      font-size: 13px;
+      color: #9aa0a6;
+    }
+
+    .extension-version {
+      font-size: 12px;
+      color: #5f6368;
+      margin-top: 4px;
+    }
+
+    .extension-toggle {
+      width: 48px;
+      height: 24px;
+      background: #5f6368;
+      border-radius: 12px;
+      position: relative;
+      cursor: pointer;
+      transition: background 0.3s ease;
+      margin-left: 16px;
+    }
+
+    .extension-toggle.active {
+      background: #81c995;
+    }
+
+    .extension-toggle::after {
+      content: '';
+      width: 20px;
+      height: 20px;
+      background: white;
+      border-radius: 50%;
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      transition: transform 0.3s ease;
+    }
+
+    .extension-toggle.active::after {
+      transform: translateX(24px);
+    }
+
+    .empty-extensions {
+      text-align: center;
+      padding: 60px 40px;
+      color: #9aa0a6;
+    }
+
+    .empty-extensions svg {
+      width: 64px;
+      height: 64px;
+      margin-bottom: 16px;
+      color: #5f6368;
+    }
+
+    .empty-extensions h3 {
+      font-size: 18px;
+      font-weight: 400;
+      margin-bottom: 8px;
+      color: #e8eaed;
+    }
+
+    .recommended-extensions {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 16px;
+    }
+
+    .recommended-card {
+      background: #292a2d;
+      border-radius: 12px;
+      padding: 20px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border: 1px solid transparent;
+    }
+
+    .recommended-card:hover {
+      background: #3c4043;
+      border-color: #5f6368;
+    }
+
+    .recommended-card .icon {
+      width: 40px;
+      height: 40px;
+      background: #35363a;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 12px;
+    }
+
+    .recommended-card .icon svg {
+      width: 20px;
+      height: 20px;
+      color: #8ab4f8;
+    }
+
+    .recommended-card h4 {
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+
+    .recommended-card p {
+      font-size: 12px;
+      color: #9aa0a6;
+      line-height: 1.4;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-primary {
+      background: #8ab4f8;
+      color: #202124;
+    }
+
+    .btn-primary:hover {
+      background: #9bbffd;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="7" height="7"/>
+        <rect x="14" y="3" width="7" height="7"/>
+        <rect x="14" y="14" width="7" height="7"/>
+        <rect x="3" y="14" width="7" height="7"/>
+      </svg>
+      Extensions
+    </h1>
+  </div>
+
+  <div class="container">
+    <div class="extensions-info">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="3" y="3" width="7" height="7"/>
+        <rect x="14" y="3" width="7" height="7"/>
+        <rect x="14" y="14" width="7" height="7"/>
+        <rect x="3" y="14" width="7" height="7"/>
+      </svg>
+      <h2>Extensions Coming Soon</h2>
+      <p>We're working hard to bring extension support to Blynx Browser. Soon you'll be able to customize your browsing experience with a wide range of extensions.</p>
+      <div class="note">Expected in version 1.1.0</div>
+    </div>
+
+    <div class="installed-extensions">
+      <h3 class="section-title">Installed Extensions</h3>
+      <div class="extension-list">
+        <div class="empty-extensions">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="3" y="3" width="7" height="7"/>
+            <rect x="14" y="3" width="7" height="7"/>
+            <rect x="14" y="14" width="7" height="7"/>
+            <rect x="3" y="14" width="7" height="7"/>
+          </svg>
+          <h3>No extensions installed</h3>
+          <p>Browse the extension gallery to find useful tools</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="recommended-extensions-section">
+      <h3 class="section-title">Recommended Extensions</h3>
+      <div class="recommended-extensions">
+        <div class="recommended-card">
+          <div class="icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M12 1v6m0 6v6m4.22-10.22l4.24-4.24M6.34 6.34L2.1 2.1m17.8 17.8l-4.24-4.24M6.34 17.66l-4.24 4.24M23 12h-6m-6 0H1m20.24-4.24l-4.24 4.24M6.34 6.34l-4.24-4.24"/>
+            </svg>
+          </div>
+          <h4>Ad Blocker</h4>
+          <p>Block ads and trackers for faster, cleaner browsing</p>
+        </div>
+
+        <div class="recommended-card">
+          <div class="icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+          </div>
+          <h4>Password Manager</h4>
+          <p>Securely store and autofill your passwords</p>
+        </div>
+
+        <div class="recommended-card">
+          <div class="icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="2" y1="12" x2="22" y2="12"/>
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+            </svg>
+          </div>
+          <h4>Translate</h4>
+          <p>Translate web pages with one click</p>
+        </div>
+
+        <div class="recommended-card">
+          <div class="icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2"/>
+              <circle cx="8.5" cy="8.5" r="1.5"/>
+              <path d="M21 15l-5-5L5 21"/>
+            </svg>
+          </div>
+          <h4>Dark Mode</h4>
+          <p>Force dark mode on all websites</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Extension toggle functionality
+    document.querySelectorAll('.extension-toggle').forEach(toggle => {
+      toggle.addEventListener('click', () => {
+        toggle.classList.toggle('active');
+      });
+    });
+
+    // Recommended card clicks
+    document.querySelectorAll('.recommended-card').forEach(card => {
+      card.addEventListener('click', () => {
+        alert('Extension gallery coming soon!');
+      });
+    });
+  </script>
+</body>
+</html>

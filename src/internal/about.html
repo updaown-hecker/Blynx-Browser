@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>About - Blynx</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #202124 0%, #292a2d 50%, #35363a 100%);
+      color: #e8eaed;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+    }
+
+    .about-card {
+      background: #292a2d;
+      border-radius: 20px;
+      padding: 60px;
+      text-align: center;
+      max-width: 500px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+
+    .logo {
+      margin-bottom: 32px;
+    }
+
+    .logo svg {
+      width: 100px;
+      height: 100px;
+      color: #8ab4f8;
+    }
+
+    .app-name {
+      font-size: 36px;
+      font-weight: 300;
+      margin-bottom: 8px;
+      background: linear-gradient(135deg, #8ab4f8 0%, #81c995 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .version {
+      font-size: 14px;
+      color: #9aa0a6;
+      margin-bottom: 32px;
+    }
+
+    .description {
+      font-size: 15px;
+      color: #9aa0a6;
+      line-height: 1.6;
+      margin-bottom: 32px;
+    }
+
+    .features {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      margin-bottom: 32px;
+      text-align: left;
+    }
+
+    .feature {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      color: #e8eaed;
+    }
+
+    .feature svg {
+      width: 18px;
+      height: 18px;
+      color: #81c995;
+      flex-shrink: 0;
+    }
+
+    .links {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .link {
+      color: #8ab4f8;
+      text-decoration: none;
+      font-size: 13px;
+      transition: color 0.2s ease;
+    }
+
+    .link:hover {
+      color: #9bbffd;
+      text-decoration: underline;
+    }
+
+    .copyright {
+      margin-top: 32px;
+      font-size: 12px;
+      color: #5f6368;
+    }
+
+    .update-btn {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      background: #8ab4f8;
+      color: #202124;
+      margin-top: 16px;
+    }
+
+    .update-btn:hover {
+      background: #9bbffd;
+    }
+
+    .update-status {
+      margin-top: 12px;
+      font-size: 13px;
+      color: #81c995;
+    }
+  </style>
+</head>
+<body>
+  <div class="about-card">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M2 12h20"/>
+        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+      </svg>
+    </div>
+
+    <h1 class="app-name">Blynx</h1>
+    <p class="version">Version 1.0.0</p>
+
+    <p class="description">
+      A fast, secure, and customizable web browser built with modern web technologies. 
+      Experience the web your way with Blynx.
+    </p>
+
+    <div class="features">
+      <div class="feature">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        Tab Management
+      </div>
+      <div class="feature">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        Custom Protocols
+      </div>
+      <div class="feature">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        Bookmarks & History
+      </div>
+      <div class="feature">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        Privacy Focused
+      </div>
+      <div class="feature">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        Fast Performance
+      </div>
+      <div class="feature">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        Modern UI
+      </div>
+    </div>
+
+    <button class="update-btn" onclick="checkForUpdates()">Check for Updates</button>
+    <div class="update-status" id="updateStatus"></div>
+
+    <div class="links">
+      <a href="blynx://settings" class="link">Settings</a>
+      <a href="https://electronjs.org" class="link">Built with Electron</a>
+      <a href="#" class="link" onclick="showLicense()">License</a>
+      <a href="#" class="link" onclick="showCredits()">Credits</a>
+    </div>
+
+    <p class="copyright">
+      © 2024 Blynx Browser. All rights reserved.<br>
+      Licensed under the MIT License
+    </p>
+  </div>
+
+  <script>
+    function checkForUpdates() {
+      const status = document.getElementById('updateStatus');
+      status.textContent = 'Checking for updates...';
+      setTimeout(() => {
+        status.textContent = 'Blynx is up to date! (v1.0.0)';
+      }, 1500);
+    }
+
+    function showLicense() {
+      alert('Blynx Browser is licensed under the MIT License.\n\nCopyright (c) 2024 Blynx Team\n\nPermission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files...');
+    }
+
+    function showCredits() {
+      alert('Blynx Browser Credits:\n\n- Electron Framework\n- Chromium Engine\n- Node.js\n- Open Source Community\n\nThank you for using Blynx!');
+    }
+  </script>
+</body>
+</html>

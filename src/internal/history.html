@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>History - Blynx</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: #202124;
+      color: #e8eaed;
+      min-height: 100vh;
+    }
+
+    .header {
+      background: #292a2d;
+      padding: 20px 40px;
+      border-bottom: 1px solid #35363a;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .header h1 {
+      font-size: 24px;
+      font-weight: 400;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header h1 svg {
+      width: 28px;
+      height: 28px;
+      color: #8ab4f8;
+    }
+
+    .search-box {
+      display: flex;
+      align-items: center;
+      background: #35363a;
+      border-radius: 8px;
+      padding: 8px 16px;
+      gap: 8px;
+    }
+
+    .search-box svg {
+      width: 18px;
+      height: 18px;
+      color: #9aa0a6;
+    }
+
+    .search-box input {
+      border: none;
+      background: transparent;
+      color: #e8eaed;
+      font-size: 14px;
+      outline: none;
+      width: 200px;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 40px;
+    }
+
+    .history-controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+
+    .history-controls h2 {
+      font-size: 16px;
+      font-weight: 500;
+      color: #9aa0a6;
+    }
+
+    .btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-danger {
+      background: #f28b82;
+      color: #202124;
+    }
+
+    .btn-danger:hover {
+      background: #f5a29b;
+    }
+
+    .btn-secondary {
+      background: #35363a;
+      color: #e8eaed;
+    }
+
+    .btn-secondary:hover {
+      background: #3c4043;
+    }
+
+    .btn svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .history-list {
+      background: #292a2d;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .history-item {
+      display: flex;
+      align-items: center;
+      padding: 16px 20px;
+      border-bottom: 1px solid #35363a;
+      cursor: pointer;
+      transition: background 0.2s ease;
+      text-decoration: none;
+      color: inherit;
+    }
+
+    .history-item:last-child {
+      border-bottom: none;
+    }
+
+    .history-item:hover {
+      background: #3c4043;
+    }
+
+    .history-favicon {
+      width: 20px;
+      height: 20px;
+      margin-right: 16px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .history-favicon img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    .history-favicon svg {
+      width: 100%;
+      height: 100%;
+      color: #9aa0a6;
+    }
+
+    .history-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .history-title {
+      font-size: 14px;
+      font-weight: 400;
+      margin-bottom: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .history-url {
+      font-size: 12px;
+      color: #9aa0a6;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .history-time {
+      font-size: 12px;
+      color: #9aa0a6;
+      flex-shrink: 0;
+      margin-left: 16px;
+    }
+
+    .history-actions {
+      display: flex;
+      gap: 8px;
+      margin-left: 16px;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    .history-item:hover .history-actions {
+      opacity: 1;
+    }
+
+    .action-btn {
+      width: 28px;
+      height: 28px;
+      border: none;
+      background: transparent;
+      color: #9aa0a6;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      transition: all 0.2s ease;
+    }
+
+    .action-btn:hover {
+      background: #4a4d51;
+      color: #e8eaed;
+    }
+
+    .action-btn svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 40px;
+      color: #9aa0a6;
+    }
+
+    .empty-state svg {
+      width: 64px;
+      height: 64px;
+      margin-bottom: 16px;
+      color: #5f6368;
+    }
+
+    .empty-state h3 {
+      font-size: 18px;
+      font-weight: 400;
+      margin-bottom: 8px;
+      color: #e8eaed;
+    }
+
+    .date-separator {
+      padding: 12px 20px;
+      background: #202124;
+      font-size: 12px;
+      color: #9aa0a6;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <polyline points="12 6 12 12 16 14"/>
+      </svg>
+      History
+    </h1>
+    <div class="search-box">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/>
+        <path d="m21 21-4.35-4.35"/>
+      </svg>
+      <input type="text" id="searchInput" placeholder="Search history...">
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="history-controls">
+      <h2>Recent History</h2>
+      <button class="btn btn-danger" onclick="clearAllHistory()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+        </svg>
+        Clear All History
+      </button>
+    </div>
+
+    <div class="history-list" id="historyList">
+      <!-- History items will be populated by JavaScript -->
+    </div>
+  </div>
+
+  <script>
+    let allHistory = [];
+
+    // Load history
+    async function loadHistory() {
+      try {
+        if (window.electronAPI) {
+          allHistory = await window.electronAPI.getHistory();
+        }
+      } catch (e) {
+        console.log('Electron API not available, using empty history');
+        allHistory = [];
+      }
+      renderHistory(allHistory);
+    }
+
+    function renderHistory(history) {
+      const container = document.getElementById('historyList');
+
+      if (history.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            <h3>No browsing history</h3>
+            <p>Pages you visit will appear here</p>
+          </div>
+        `;
+        return;
+      }
+
+      let currentDate = '';
+      let html = '';
+
+      history.forEach(item => {
+        const date = new Date(item.visitedAt);
+        const dateStr = date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+        if (dateStr !== currentDate) {
+          currentDate = dateStr;
+          html += `<div class="date-separator">${dateStr}</div>`;
+        }
+
+        const timeStr = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+        const faviconUrl = item.favicon || '';
+
+        html += `
+          <a href="${item.url}" class="history-item" data-url="${item.url}">
+            <div class="history-favicon">
+              ${faviconUrl ? `<img src="${faviconUrl}" alt="">` : `
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="2" y1="12" x2="22" y2="12"/>
+                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                </svg>
+              `}
+            </div>
+            <div class="history-info">
+              <div class="history-title">${escapeHtml(item.title || 'Untitled')}</div>
+              <div class="history-url">${escapeHtml(item.url)}</div>
+            </div>
+            <div class="history-time">${timeStr}</div>
+            <div class="history-actions">
+              <button class="action-btn" title="Delete" onclick="deleteHistoryItem(${item.id}, event)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="3 6 5 6 21 6"/>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                </svg>
+              </button>
+            </div>
+          </a>
+        `;
+      });
+
+      container.innerHTML = html;
+
+      // Add click handlers
+      document.querySelectorAll('.history-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+          if (!e.target.closest('.history-actions')) {
+            e.preventDefault();
+            const url = item.dataset.url;
+            if (window.electronAPI && window.electronAPI.openUrlInBrowser) {
+              window.electronAPI.openUrlInBrowser(url);
+            } else {
+              window.location.href = url;
+            }
+          }
+        });
+      });
+    }
+
+    async function deleteHistoryItem(id, event) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      allHistory = allHistory.filter(h => h.id !== id);
+
+      try {
+        if (window.electronAPI) {
+          // Re-save filtered history
+          if (window.electronAPI.setHistory) {
+            await window.electronAPI.setHistory(allHistory);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to delete history item:', e);
+      }
+
+      renderHistory(allHistory);
+    }
+
+    async function clearAllHistory() {
+      if (!confirm('Clear all browsing history? This cannot be undone.')) {
+        return;
+      }
+
+      try {
+        if (window.electronAPI) {
+          await window.electronAPI.clearHistory();
+          allHistory = [];
+        }
+      } catch (e) {
+        console.error('Failed to clear history:', e);
+        allHistory = [];
+      }
+
+      renderHistory(allHistory);
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Search functionality
+    document.getElementById('searchInput').addEventListener('input', (e) => {
+      const query = e.target.value.toLowerCase();
+      const filtered = allHistory.filter(item =>
+        (item.title && item.title.toLowerCase().includes(query)) ||
+        item.url.toLowerCase().includes(query)
+      );
+      renderHistory(filtered);
+    });
+
+    loadHistory();
+  </script>
+</body>
+</html>

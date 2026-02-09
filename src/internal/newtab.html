@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>New Tab</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #202124 0%, #292a2d 100%);
+      color: #e8eaed;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+    }
+
+    .logo {
+      margin-bottom: 40px;
+      text-align: center;
+    }
+
+    .logo svg {
+      width: 80px;
+      height: 80px;
+      color: #8ab4f8;
+      margin-bottom: 16px;
+    }
+
+    .logo h1 {
+      font-size: 42px;
+      font-weight: 300;
+      letter-spacing: -1px;
+      background: linear-gradient(135deg, #8ab4f8 0%, #81c995 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .search-container {
+      width: 100%;
+      max-width: 600px;
+      margin-bottom: 60px;
+    }
+
+    .search-box {
+      display: flex;
+      align-items: center;
+      background: #35363a;
+      border-radius: 24px;
+      padding: 12px 20px;
+      border: 1px solid transparent;
+      transition: all 0.3s ease;
+    }
+
+    .search-box:focus-within {
+      background: #3c4043;
+      border-color: #5f6368;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    }
+
+    .search-box svg {
+      width: 20px;
+      height: 20px;
+      color: #9aa0a6;
+      margin-right: 12px;
+      flex-shrink: 0;
+    }
+
+    .search-box input {
+      flex: 1;
+      border: none;
+      background: transparent;
+      color: #e8eaed;
+      font-size: 16px;
+      outline: none;
+    }
+
+    .search-box input::placeholder {
+      color: #9aa0a6;
+    }
+
+    .shortcuts {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 20px;
+      width: 100%;
+      max-width: 800px;
+    }
+
+    .shortcut {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px 16px;
+      background: #35363a;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-decoration: none;
+      border: none;
+    }
+
+    .shortcut:hover {
+      background: #3c4043;
+      transform: translateY(-4px);
+    }
+
+    .shortcut-icon {
+      width: 48px;
+      height: 48px;
+      background: #202124;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 12px;
+    }
+
+    .shortcut-icon svg {
+      width: 24px;
+      height: 24px;
+      color: #8ab4f8;
+    }
+
+    .shortcut-title {
+      font-size: 13px;
+      color: #e8eaed;
+      text-align: center;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .footer {
+      position: absolute;
+      bottom: 20px;
+      text-align: center;
+      color: #9aa0a6;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="logo">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <circle cx="12" cy="12" r="10"/>
+      <path d="M2 12h20"/>
+      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+    </svg>
+    <h1>Blynx</h1>
+  </div>
+
+  <div class="search-container">
+    <div class="search-box">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/>
+        <path d="m21 21-4.35-4.35"/>
+      </svg>
+      <input type="text" id="searchInput" placeholder="Search the web or type a URL" autofocus>
+    </div>
+  </div>
+
+  <div class="shortcuts" id="shortcuts">
+    <!-- Shortcuts will be populated by JavaScript -->
+  </div>
+
+  <div class="footer">
+    Blynx Browser v1.0.0
+  </div>
+
+  <script>
+    // Default shortcuts
+    const defaultShortcuts = [
+      { title: 'Google', url: 'https://www.google.com', icon: 'search' },
+      { title: 'YouTube', url: 'https://www.youtube.com', icon: 'video' },
+      { title: 'GitHub', url: 'https://github.com', icon: 'code' },
+      { title: 'Settings', url: 'blynx://settings', icon: 'settings' },
+      { title: 'History', url: 'blynx://history', icon: 'clock' },
+      { title: 'Bookmarks', url: 'blynx://bookmarks', icon: 'bookmark' }
+    ];
+
+    // Icon SVGs
+    const icons = {
+      search: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>`,
+      video: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m22 8-6 4 6 4V8Z"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>`,
+      code: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/><path d="m14.5 4-5 16"/></svg>`,
+      settings: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>`,
+      clock: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+      bookmark: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg>`
+    };
+
+    // Initialize shortcuts
+    async function initShortcuts() {
+      const shortcutsContainer = document.getElementById('shortcuts');
+
+      // Get bookmarks as shortcuts too
+      let shortcuts = [...defaultShortcuts];
+      try {
+        if (window.electronAPI) {
+          const bookmarks = await window.electronAPI.getBookmarks();
+          if (bookmarks && bookmarks.length > 0) {
+            shortcuts = bookmarks.slice(0, 4).map(b => ({
+              title: b.title,
+              url: b.url,
+              icon: 'bookmark'
+            })).concat(defaultShortcuts);
+          }
+        }
+      } catch (e) {
+        console.log('Electron API not available');
+      }
+
+      shortcuts.slice(0, 8).forEach(shortcut => {
+        const el = document.createElement('a');
+        el.className = 'shortcut';
+        el.href = shortcut.url;
+        el.innerHTML = `
+          <div class="shortcut-icon">
+            ${icons[shortcut.icon] || icons.search}
+          </div>
+          <span class="shortcut-title">${shortcut.title}</span>
+        `;
+        el.addEventListener('click', (e) => {
+          e.preventDefault();
+          if (window.electronAPI && window.electronAPI.openUrlInBrowser) {
+            window.electronAPI.openUrlInBrowser(shortcut.url);
+          } else {
+            window.location.href = shortcut.url;
+          }
+        });
+        shortcutsContainer.appendChild(el);
+      });
+    }
+
+    // Search functionality
+    document.getElementById('searchInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const query = e.target.value.trim();
+        if (query) {
+          let url = query;
+          if (!query.includes('.') || query.includes(' ')) {
+            url = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+          } else if (!query.startsWith('http://') && !query.startsWith('https://')) {
+            url = 'https://' + query;
+          }
+
+          if (window.electronAPI && window.electronAPI.openUrlInBrowser) {
+            window.electronAPI.openUrlInBrowser(url);
+          } else {
+            window.location.href = url;
+          }
+        }
+      }
+    });
+
+    initShortcuts();
+  </script>
+</body>
+</html>

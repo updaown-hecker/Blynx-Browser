@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bookmarks - Blynx</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: #202124;
+      color: #e8eaed;
+      min-height: 100vh;
+    }
+
+    .header {
+      background: #292a2d;
+      padding: 20px 40px;
+      border-bottom: 1px solid #35363a;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .header h1 {
+      font-size: 24px;
+      font-weight: 400;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header h1 svg {
+      width: 28px;
+      height: 28px;
+      color: #fdd663;
+    }
+
+    .search-box {
+      display: flex;
+      align-items: center;
+      background: #35363a;
+      border-radius: 8px;
+      padding: 8px 16px;
+      gap: 8px;
+    }
+
+    .search-box svg {
+      width: 18px;
+      height: 18px;
+      color: #9aa0a6;
+    }
+
+    .search-box input {
+      border: none;
+      background: transparent;
+      color: #e8eaed;
+      font-size: 14px;
+      outline: none;
+      width: 200px;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 40px;
+    }
+
+    .bookmarks-controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+
+    .bookmarks-controls h2 {
+      font-size: 16px;
+      font-weight: 500;
+      color: #9aa0a6;
+    }
+
+    .btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-primary {
+      background: #8ab4f8;
+      color: #202124;
+    }
+
+    .btn-primary:hover {
+      background: #9bbffd;
+    }
+
+    .btn-danger {
+      background: #f28b82;
+      color: #202124;
+    }
+
+    .btn-danger:hover {
+      background: #f5a29b;
+    }
+
+    .btn svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .bookmarks-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
+    .bookmark-card {
+      background: #292a2d;
+      border-radius: 12px;
+      padding: 20px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-decoration: none;
+      color: inherit;
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      position: relative;
+    }
+
+    .bookmark-card:hover {
+      background: #3c4043;
+      transform: translateY(-2px);
+    }
+
+    .bookmark-favicon {
+      width: 40px;
+      height: 40px;
+      background: #35363a;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .bookmark-favicon img {
+      width: 24px;
+      height: 24px;
+      object-fit: contain;
+    }
+
+    .bookmark-favicon svg {
+      width: 24px;
+      height: 24px;
+      color: #fdd663;
+    }
+
+    .bookmark-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .bookmark-title {
+      font-size: 15px;
+      font-weight: 500;
+      margin-bottom: 6px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .bookmark-url {
+      font-size: 12px;
+      color: #9aa0a6;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .bookmark-actions {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      display: flex;
+      gap: 4px;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    .bookmark-card:hover .bookmark-actions {
+      opacity: 1;
+    }
+
+    .action-btn {
+      width: 28px;
+      height: 28px;
+      border: none;
+      background: #4a4d51;
+      color: #9aa0a6;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .action-btn:hover {
+      background: #5f6368;
+      color: #e8eaed;
+    }
+
+    .action-btn svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 80px 40px;
+      color: #9aa0a6;
+    }
+
+    .empty-state svg {
+      width: 80px;
+      height: 80px;
+      margin-bottom: 24px;
+      color: #5f6368;
+    }
+
+    .empty-state h3 {
+      font-size: 20px;
+      font-weight: 400;
+      margin-bottom: 12px;
+      color: #e8eaed;
+    }
+
+    .empty-state p {
+      font-size: 14px;
+      max-width: 400px;
+      margin: 0 auto 24px;
+      line-height: 1.6;
+    }
+
+    .add-bookmark-form {
+      display: none;
+      background: #292a2d;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+
+    .add-bookmark-form.show {
+      display: block;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      color: #9aa0a6;
+      margin-bottom: 6px;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #5f6368;
+      background: #35363a;
+      color: #e8eaed;
+      border-radius: 6px;
+      font-size: 14px;
+      outline: none;
+    }
+
+    .form-group input:focus {
+      border-color: #8ab4f8;
+    }
+
+    .form-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>
+      </svg>
+      Bookmarks
+    </h1>
+    <div class="search-box">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/>
+        <path d="m21 21-4.35-4.35"/>
+      </svg>
+      <input type="text" id="searchInput" placeholder="Search bookmarks...">
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="add-bookmark-form" id="addBookmarkForm">
+      <div class="form-group">
+        <label>Title</label>
+        <input type="text" id="bookmarkTitle" placeholder="Enter bookmark title">
+      </div>
+      <div class="form-group">
+        <label>URL</label>
+        <input type="text" id="bookmarkUrl" placeholder="Enter URL (e.g., https://example.com)">
+      </div>
+      <div class="form-actions">
+        <button class="btn" onclick="hideAddForm()" style="background: transparent; color: #9aa0a6;">Cancel</button>
+        <button class="btn btn-primary" onclick="addBookmark()">Add Bookmark</button>
+      </div>
+    </div>
+
+    <div class="bookmarks-controls">
+      <h2>Your Bookmarks</h2>
+      <button class="btn btn-primary" onclick="showAddForm()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="12" y1="5" x2="12" y2="19"/>
+          <line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        Add Bookmark
+      </button>
+    </div>
+
+    <div class="bookmarks-grid" id="bookmarksGrid">
+      <!-- Bookmarks will be populated by JavaScript -->
+    </div>
+  </div>
+
+  <script>
+    let allBookmarks = [];
+
+    async function loadBookmarks() {
+      try {
+        if (window.electronAPI) {
+          allBookmarks = await window.electronAPI.getBookmarks();
+        }
+      } catch (e) {
+        console.log('Electron API not available');
+        allBookmarks = [];
+      }
+      renderBookmarks(allBookmarks);
+    }
+
+    function renderBookmarks(bookmarks) {
+      const container = document.getElementById('bookmarksGrid');
+
+      if (bookmarks.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state" style="grid-column: 1 / -1;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>
+            </svg>
+            <h3>No bookmarks yet</h3>
+            <p>Save your favorite websites for quick access. Click the star icon in the address bar or the Add Bookmark button above.</p>
+            <button class="btn btn-primary" onclick="showAddForm()">Add Your First Bookmark</button>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = bookmarks.map(bookmark => `
+        <a href="${bookmark.url}" class="bookmark-card" data-id="${bookmark.id}">
+          <div class="bookmark-favicon">
+            ${bookmark.favicon ? `<img src="${bookmark.favicon}" alt="">` : `
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>
+              </svg>
+            `}
+          </div>
+          <div class="bookmark-info">
+            <div class="bookmark-title">${escapeHtml(bookmark.title)}</div>
+            <div class="bookmark-url">${escapeHtml(bookmark.url)}</div>
+          </div>
+          <div class="bookmark-actions">
+            <button class="action-btn" title="Delete" onclick="deleteBookmark(${bookmark.id}, event)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+            </button>
+          </div>
+        </a>
+      `).join('');
+
+      // Add click handlers
+      document.querySelectorAll('.bookmark-card').forEach(card => {
+        card.addEventListener('click', (e) => {
+          if (!e.target.closest('.bookmark-actions')) {
+            e.preventDefault();
+            const url = card.href;
+            if (window.electronAPI && window.electronAPI.openUrlInBrowser) {
+              window.electronAPI.openUrlInBrowser(url);
+            } else {
+              window.location.href = url;
+            }
+          }
+        });
+      });
+    }
+
+    function showAddForm() {
+      document.getElementById('addBookmarkForm').classList.add('show');
+      document.getElementById('bookmarkTitle').focus();
+    }
+
+    function hideAddForm() {
+      document.getElementById('addBookmarkForm').classList.remove('show');
+      document.getElementById('bookmarkTitle').value = '';
+      document.getElementById('bookmarkUrl').value = '';
+    }
+
+    async function addBookmark() {
+      const title = document.getElementById('bookmarkTitle').value.trim();
+      const url = document.getElementById('bookmarkUrl').value.trim();
+
+      if (!title || !url) {
+        alert('Please enter both title and URL');
+        return;
+      }
+
+      let finalUrl = url;
+      if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('blynx://')) {
+        finalUrl = 'https://' + url;
+      }
+
+      try {
+        if (window.electronAPI) {
+          await window.electronAPI.addBookmark({ title, url: finalUrl });
+          allBookmarks = await window.electronAPI.getBookmarks();
+        } else {
+          allBookmarks.push({
+            id: Date.now(),
+            title,
+            url: finalUrl,
+            createdAt: new Date().toISOString()
+          });
+        }
+        hideAddForm();
+        renderBookmarks(allBookmarks);
+      } catch (e) {
+        console.error('Failed to add bookmark:', e);
+      }
+    }
+
+    async function deleteBookmark(id, event) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (!confirm('Delete this bookmark?')) {
+        return;
+      }
+
+      try {
+        if (window.electronAPI) {
+          await window.electronAPI.removeBookmark(id);
+          allBookmarks = await window.electronAPI.getBookmarks();
+        } else {
+          allBookmarks = allBookmarks.filter(b => b.id !== id);
+        }
+        renderBookmarks(allBookmarks);
+      } catch (e) {
+        console.error('Failed to delete bookmark:', e);
+      }
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Search functionality
+    document.getElementById('searchInput').addEventListener('input', (e) => {
+      const query = e.target.value.toLowerCase();
+      const filtered = allBookmarks.filter(bookmark =>
+        bookmark.title.toLowerCase().includes(query) ||
+        bookmark.url.toLowerCase().includes(query)
+      );
+      renderBookmarks(filtered);
+    });
+
+    loadBookmarks();
+  </script>
+</body>
+</html>

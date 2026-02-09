@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Downloads - Blynx</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: #202124;
+      color: #e8eaed;
+      min-height: 100vh;
+    }
+
+    .header {
+      background: #292a2d;
+      padding: 20px 40px;
+      border-bottom: 1px solid #35363a;
+    }
+
+    .header h1 {
+      font-size: 24px;
+      font-weight: 400;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header h1 svg {
+      width: 28px;
+      height: 28px;
+      color: #81c995;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 40px;
+    }
+
+    .downloads-controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+
+    .downloads-controls h2 {
+      font-size: 16px;
+      font-weight: 500;
+      color: #9aa0a6;
+    }
+
+    .btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-secondary {
+      background: #35363a;
+      color: #e8eaed;
+    }
+
+    .btn-secondary:hover {
+      background: #3c4043;
+    }
+
+    .btn svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .downloads-list {
+      background: #292a2d;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .download-item {
+      display: flex;
+      align-items: center;
+      padding: 20px;
+      border-bottom: 1px solid #35363a;
+    }
+
+    .download-item:last-child {
+      border-bottom: none;
+    }
+
+    .download-icon {
+      width: 48px;
+      height: 48px;
+      background: #35363a;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-right: 20px;
+      flex-shrink: 0;
+    }
+
+    .download-icon svg {
+      width: 24px;
+      height: 24px;
+      color: #81c995;
+    }
+
+    .download-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .download-filename {
+      font-size: 15px;
+      font-weight: 500;
+      margin-bottom: 6px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .download-url {
+      font-size: 12px;
+      color: #9aa0a6;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 8px;
+    }
+
+    .download-progress {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .progress-bar {
+      flex: 1;
+      height: 4px;
+      background: #35363a;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: #81c995;
+      border-radius: 2px;
+      transition: width 0.3s ease;
+    }
+
+    .progress-text {
+      font-size: 12px;
+      color: #9aa0a6;
+      flex-shrink: 0;
+      min-width: 50px;
+      text-align: right;
+    }
+
+    .download-status {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 4px;
+      margin-left: 16px;
+    }
+
+    .download-status.completed {
+      background: #81c995;
+      color: #202124;
+    }
+
+    .download-status.downloading {
+      background: #8ab4f8;
+      color: #202124;
+    }
+
+    .download-status.failed {
+      background: #f28b82;
+      color: #202124;
+    }
+
+    .download-actions {
+      display: flex;
+      gap: 8px;
+      margin-left: 16px;
+    }
+
+    .action-btn {
+      width: 32px;
+      height: 32px;
+      border: none;
+      background: transparent;
+      color: #9aa0a6;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .action-btn:hover {
+      background: #4a4d51;
+      color: #e8eaed;
+    }
+
+    .action-btn svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 80px 40px;
+      color: #9aa0a6;
+    }
+
+    .empty-state svg {
+      width: 80px;
+      height: 80px;
+      margin-bottom: 24px;
+      color: #5f6368;
+    }
+
+    .empty-state h3 {
+      font-size: 20px;
+      font-weight: 400;
+      margin-bottom: 12px;
+      color: #e8eaed;
+    }
+
+    .empty-state p {
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="7 10 12 15 17 10"/>
+        <line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+      Downloads
+    </h1>
+  </div>
+
+  <div class="container">
+    <div class="downloads-controls">
+      <h2>Recent Downloads</h2>
+      <button class="btn btn-secondary" onclick="clearCompleted()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+        </svg>
+        Clear Completed
+      </button>
+    </div>
+
+    <div class="downloads-list" id="downloadsList">
+      <!-- Downloads will be populated by JavaScript -->
+    </div>
+  </div>
+
+  <script>
+    // Sample downloads data (in a real implementation, this would come from the main process)
+    let downloads = [];
+
+    async function loadDownloads() {
+      try {
+        if (window.electronAPI) {
+          downloads = await window.electronAPI.storeGet('downloads', []);
+        }
+      } catch (e) {
+        console.log('Electron API not available');
+        downloads = [];
+      }
+      renderDownloads();
+    }
+
+    function renderDownloads() {
+      const container = document.getElementById('downloadsList');
+
+      if (downloads.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            <h3>No downloads</h3>
+            <p>Files you download will appear here</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = downloads.map(download => `
+        <div class="download-item">
+          <div class="download-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+          </div>
+          <div class="download-info">
+            <div class="download-filename">${escapeHtml(download.filename || 'Unknown')}</div>
+            <div class="download-url">${escapeHtml(download.url || '')}</div>
+            ${download.status === 'downloading' ? `
+              <div class="download-progress">
+                <div class="progress-bar">
+                  <div class="progress-fill" style="width: ${download.progress || 0}%"></div>
+                </div>
+                <span class="progress-text">${download.progress || 0}%</span>
+              </div>
+            ` : ''}
+          </div>
+          <span class="download-status ${download.status}">${download.status || 'completed'}</span>
+          <div class="download-actions">
+            ${download.status === 'completed' ? `
+              <button class="action-btn" title="Open file" onclick="openFile('${download.path}')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                  <polyline points="15 3 21 3 21 9"/>
+                  <line x1="10" y1="14" x2="21" y2="3"/>
+                </svg>
+              </button>
+            ` : ''}
+            <button class="action-btn" title="Remove" onclick="removeDownload(${download.id})">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function clearCompleted() {
+      downloads = downloads.filter(d => d.status !== 'completed');
+      try {
+        if (window.electronAPI) {
+          await window.electronAPI.storeSet('downloads', downloads);
+        }
+      } catch (e) {
+        console.error('Failed to clear downloads:', e);
+      }
+      renderDownloads();
+    }
+
+    async function removeDownload(id) {
+      downloads = downloads.filter(d => d.id !== id);
+      try {
+        if (window.electronAPI) {
+          await window.electronAPI.storeSet('downloads', downloads);
+        }
+      } catch (e) {
+        console.error('Failed to remove download:', e);
+      }
+      renderDownloads();
+    }
+
+    function openFile(path) {
+      // In a real implementation, this would use the shell API
+      console.log('Opening file:', path);
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    loadDownloads();
+  </script>
+</body>
+</html>
