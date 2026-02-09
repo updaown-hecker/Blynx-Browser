@@ -34,17 +34,25 @@
       "output": "dist"
     },
     "files": [
-      "src/**/*",
-      "assets/**/*"
+      "src/**/*"
     ],
-    "mac": {
-      "category": "public.app-category.utilities"
+    "extraMetadata": {
+      "name": "Blynx",
+      "productName": "Blynx"
     },
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "src/assets/favicon.ico",
+      "executableName": "Blynx",
+      "signAndEditExecutable": true
+    },
+    "mac": {
+      "category": "public.app-category.utilities",
+      "icon": "src/assets/App-icon.png"
     },
     "linux": {
-      "target": "AppImage"
+      "target": "AppImage",
+      "icon": "src/assets/App-icon.png"
     }
-  }
+}
 }

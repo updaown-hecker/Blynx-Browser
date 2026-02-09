@@ -1,9 +1,10 @@
-const { app, BrowserWindow, ipcMain, shell, session, Menu, protocol, webContents, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, session, Menu, protocol, webContents, Tray, clipboard } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('url');
 const fs = require('fs');
 const Store = require('electron-store');
 
+let tray = null;
 let tabDragBuffer = null;
 let tabDragClaimed = false;
 
@@ -13,6 +14,29 @@ app.commandLine.appendSwitch('enable-zero-copy');
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('disable-background-timer-throttling');
 
+// fix tray icon made from chat gpt 
+app.whenReady().then(() => {
+  // Create tray icon
+  tray = new Tray(path.join(__dirname, 'assets', 'favicon.ico'));
+  tray.setToolTip('Blynx'); // optional tooltip
+
+  // Optionally, you can add a context menu
+  const { Menu } = require('electron');
+  const trayMenu = Menu.buildFromTemplate([
+    { label: 'Open Blynx', click: () => {
+        const allWindows = BrowserWindow.getAllWindows();
+        if (allWindows.length) {
+          allWindows[0].show();
+          allWindows[0].focus();
+        }
+      } 
+    },
+    { type: 'separator' },
+    { label: 'Quit', role: 'quit' }
+  ]);
+  tray.setContextMenu(trayMenu);
+});
+// end
 const projectUserDataDir = path.join(__dirname, 'userdata');
 if (!fs.existsSync(projectUserDataDir)) {
   fs.mkdirSync(projectUserDataDir, { recursive: true });
