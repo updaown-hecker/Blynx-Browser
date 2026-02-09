@@ -2,7 +2,7 @@
 
 A full-featured web browser built with Electron, featuring a modern Chrome-like interface with custom protocol support.
 
-![Blynx Browser](assets/blynx-logo.png)
+![Blynx Browser](src/assets/Blynx-Product.png)
 
 ## Features
 
