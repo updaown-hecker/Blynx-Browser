@@ -1,12 +1,67 @@
-const { app, BrowserWindow, ipcMain, shell, session, Menu, protocol, webContents, Tray, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, session, Menu, protocol, webContents, Tray, clipboard, dialog } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('url');
 const fs = require('fs');
 const Store = require('electron-store');
+const https = require('https');
+const extractZip = require('extract-zip');
 
 let tray = null;
 let tabDragBuffer = null;
 let tabDragClaimed = false;
+
+function broadcastToAllWindows(channel, payload) {
+  try {
+    BrowserWindow.getAllWindows().forEach((w) => {
+      try {
+        if (w && !w.isDestroyed()) {
+          w.webContents.send(channel, payload);
+        }
+      } catch {
+        // ignore
+      }
+    });
+  } catch {
+    // ignore
+  }
+}
+
+const childWindowParentContents = new WeakMap();
+
+function getExtensionStorageStore(profileId, extensionId) {
+  const id = profileId || 'default';
+  const extId = extensionId || 'unknown';
+  const dataDir = path.join(app.getPath('userData'), id, 'ext-storage', extId);
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+  return new Store({ name: 'storage', cwd: dataDir });
+}
+
+function normalizeStorageKeysArg(keys) {
+  if (keys == null) return { mode: 'all' };
+  if (typeof keys === 'string') return { mode: 'list', keys: [keys] };
+  if (Array.isArray(keys)) return { mode: 'list', keys: keys.map(String) };
+  if (typeof keys === 'object') return { mode: 'defaults', defaults: keys };
+  return { mode: 'all' };
+}
+
+function buildStorageChanges(prevObj, nextObj) {
+  const changes = {};
+  const keys = new Set([
+    ...Object.keys(prevObj || {}),
+    ...Object.keys(nextObj || {})
+  ]);
+  keys.forEach((k) => {
+    const oldValue = prevObj ? prevObj[k] : undefined;
+    const newValue = nextObj ? nextObj[k] : undefined;
+    const same = JSON.stringify(oldValue) === JSON.stringify(newValue);
+    if (!same) {
+      changes[k] = { oldValue, newValue };
+    }
+  });
+  return changes;
+}
 
 // Performance switches (desktop-focused)
 app.commandLine.appendSwitch('enable-gpu-rasterization');
@@ -419,6 +474,266 @@ function registerBlynxProtocolForSession(ses) {
     callback({ path: filePath });
   });
 }
+
+function readJsonFileSafe(p) {
+  try {
+    if (!p || !fs.existsSync(p)) return null;
+    const raw = fs.readFileSync(p, 'utf8');
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function pickBestIconPath(manifest) {
+  try {
+    const icons = manifest && manifest.icons ? manifest.icons : null;
+    if (!icons || typeof icons !== 'object') return null;
+    const sizes = Object.keys(icons)
+      .map(k => Number(k))
+      .filter(n => Number.isFinite(n))
+      .sort((a, b) => a - b);
+    if (sizes.length === 0) return null;
+    const preferred = sizes.find(s => s >= 32) || sizes[sizes.length - 1];
+    return icons[String(preferred)] || null;
+  } catch {
+    return null;
+  }
+}
+
+function getPopupPathFromManifest(manifest) {
+  try {
+    if (!manifest || typeof manifest !== 'object') return null;
+    const action = manifest.action || manifest.browser_action || null;
+    const popup = action && action.default_popup ? String(action.default_popup) : '';
+    return popup ? popup : null;
+  } catch {
+    return null;
+  }
+}
+
+function getExtensionsMetadataForProfile(profileId) {
+  const ses = getProfileSession(profileId);
+  const exts = ses.getAllExtensions ? ses.getAllExtensions() : new Map();
+  const out = [];
+
+  try {
+    for (const ext of exts.values()) {
+      if (!ext || !ext.id) continue;
+
+      const manifest = ext.manifest || readJsonFileSafe(path.join(ext.path, 'manifest.json'));
+      const iconRel = pickBestIconPath(manifest);
+      const iconUrl = iconRel
+        ? pathToFileURL(path.join(ext.path, iconRel)).toString()
+        : null;
+
+      const popupPath = getPopupPathFromManifest(manifest);
+
+      out.push({
+        id: ext.id,
+        name: ext.name,
+        version: ext.version,
+        path: ext.path,
+        iconUrl,
+        popupPath
+      });
+    }
+  } catch {
+    // ignore
+  }
+
+  return out;
+}
+
+let extensionPopupWindow = null;
+
+function closeExtensionPopupWindow() {
+  try {
+    if (extensionPopupWindow && !extensionPopupWindow.isDestroyed()) {
+      extensionPopupWindow.close();
+    }
+  } catch {
+    // ignore
+  }
+  extensionPopupWindow = null;
+}
+
+function getProfilePartition(profileId) {
+  const id = profileId || 'default';
+  return `persist:blynx-${id}`;
+}
+
+function getProfileSession(profileId) {
+  const partition = getProfilePartition(profileId);
+  const ses = session.fromPartition(partition);
+  registerBlynxProtocolForSession(ses);
+  try {
+    const existing = typeof ses.getPreloads === 'function' ? ses.getPreloads() : [];
+    const preloadPath = path.join(__dirname, 'extension-preload.js');
+    const next = Array.isArray(existing) ? existing.slice() : [];
+    if (!next.includes(preloadPath)) {
+      next.push(preloadPath);
+      if (typeof ses.setPreloads === 'function') {
+        ses.setPreloads(next);
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return ses;
+}
+
+function ensureDir(p) {
+  if (!fs.existsSync(p)) {
+    fs.mkdirSync(p, { recursive: true });
+  }
+}
+
+function getProfileExtensionsDir(profileId) {
+  const id = profileId || 'default';
+  const dir = path.join(app.getPath('userData'), id, 'extensions');
+  ensureDir(dir);
+  return dir;
+}
+
+function findZipStartInCrxBuffer(buf) {
+  if (!buf || buf.length < 4) return -1;
+  // ZIP local file header signature
+  const sig = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
+  return buf.indexOf(sig);
+}
+
+function extractExtensionIdFromWebStoreUrl(input) {
+  try {
+    const raw = String(input || '').trim();
+    if (!raw) return null;
+
+    // Allow pasting just the ID
+    if (/^[a-p]{32}$/.test(raw)) return raw;
+
+    const u = new URL(raw);
+    const id = u.searchParams.get('id');
+    if (id && /^[a-p]{32}$/.test(id)) return id;
+
+    // Typical pattern: /detail/<name>/<id>
+    const parts = u.pathname.split('/').filter(Boolean);
+    const maybe = parts[parts.length - 1];
+    if (maybe && /^[a-p]{32}$/.test(maybe)) return maybe;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function downloadToBuffer(url) {
+  return new Promise((resolve, reject) => {
+    const u = String(url || '').trim();
+    if (!u) {
+      reject(new Error('Missing URL'));
+      return;
+    }
+
+    const req = https.get(u, (res) => {
+      const status = res.statusCode || 0;
+      const location = res.headers && res.headers.location ? String(res.headers.location) : '';
+      if (status >= 300 && status < 400 && location) {
+        res.resume();
+        resolve(downloadToBuffer(location));
+        return;
+      }
+
+      if (status < 200 || status >= 300) {
+        res.resume();
+        reject(new Error(`HTTP ${status}`));
+        return;
+      }
+
+      const chunks = [];
+      res.on('data', (d) => chunks.push(d));
+      res.on('end', () => resolve(Buffer.concat(chunks)));
+    });
+
+    req.on('error', reject);
+  });
+}
+
+async function installExtensionFromCrxBuffer({ profileId, crxBuffer, suggestedId = null }) {
+  const pid = profileId || 'default';
+  const extDirRoot = getProfileExtensionsDir(pid);
+
+  const zipStart = findZipStartInCrxBuffer(crxBuffer);
+  if (zipStart < 0) {
+    throw new Error('Could not parse CRX (ZIP payload not found)');
+  }
+
+  const zipBuf = crxBuffer.slice(zipStart);
+  const now = Date.now();
+  const baseName = suggestedId && /^[a-p]{32}$/.test(String(suggestedId))
+    ? String(suggestedId)
+    : 'extension';
+
+  const installDir = path.join(extDirRoot, `${baseName}-${now}`);
+  ensureDir(installDir);
+
+  const zipPath = path.join(installDir, 'ext.zip');
+  fs.writeFileSync(zipPath, zipBuf);
+
+  await extractZip(zipPath, { dir: installDir });
+  try {
+    fs.unlinkSync(zipPath);
+  } catch {
+    // ignore
+  }
+
+  const ses = getProfileSession(pid);
+  const ext = await ses.loadExtension(installDir, { allowFileAccess: true });
+
+  const s = getProfileStore(pid);
+  const existing = s.get('extensions.paths', []);
+  const next = Array.isArray(existing) ? existing.slice() : [];
+  if (!next.includes(installDir)) {
+    next.push(installDir);
+    s.set('extensions.paths', next);
+  }
+
+  return {
+    id: ext.id,
+    name: ext.name,
+    version: ext.version,
+    path: ext.path
+  };
+}
+
+async function loadPersistedExtensionsForProfile(profileId) {
+  const s = getProfileStore(profileId || 'default');
+  const paths = s.get('extensions.paths', []);
+  const ses = getProfileSession(profileId);
+
+  const safePaths = Array.isArray(paths)
+    ? paths
+        .map(p => (typeof p === 'string' ? p.trim() : ''))
+        .filter(Boolean)
+    : [];
+
+  const loaded = ses.getAllExtensions ? ses.getAllExtensions() : new Map();
+  const loadedPaths = new Set();
+  try {
+    for (const ext of loaded.values()) {
+      if (ext && ext.path) loadedPaths.add(ext.path);
+    }
+  } catch {
+    // ignore
+  }
+
+  for (const extPath of safePaths) {
+    if (loadedPaths.has(extPath)) continue;
+    try {
+      await ses.loadExtension(extPath, { allowFileAccess: true });
+    } catch (e) {
+      // ignore
+    }
+  }
+}
 let mainWindow;
 let windows = [];
 
@@ -582,6 +897,17 @@ app.on('web-contents-created', (e, contents) => {
         return { action: 'allow' };
       }
 
+      // Some OAuth/login flows begin with about:blank and only later navigate to the real URL.
+      // Allow the blank child window to be created so we can capture its first real navigation.
+      if (u === 'about:blank') {
+        return { action: 'allow' };
+      }
+
+      // Allow extension-owned windows (some extensions open their own pages)
+      if (u.startsWith('chrome-extension://')) {
+        return { action: 'allow' };
+      }
+
       // Route all other window.open/popups into a new tab in the *owning* window
       if (u) {
         sendToOwnerNewTab(contents, u);
@@ -591,6 +917,44 @@ app.on('web-contents-created', (e, contents) => {
     }
 
     return { action: 'deny' };
+  });
+
+  contents.on('did-create-window', (childWindow) => {
+    try {
+      if (!childWindow || childWindow.isDestroyed()) return;
+
+      // Remember the opener so the child can open the new tab in the correct window.
+      childWindowParentContents.set(childWindow.webContents, contents);
+
+      let handled = false;
+      const maybeHandleUrl = (rawUrl) => {
+        if (handled) return;
+        const u = rawUrl ? String(rawUrl) : '';
+        if (!u || u === 'about:blank') return;
+        if (u.startsWith('devtools://') || u.startsWith('chrome-devtools://')) return;
+
+        handled = true;
+        sendToOwnerNewTab(contents, u);
+        try {
+          if (!childWindow.isDestroyed()) childWindow.close();
+        } catch {
+          // ignore
+        }
+      };
+
+      childWindow.webContents.on('will-navigate', (ev, u) => {
+        try { ev.preventDefault(); } catch {}
+        maybeHandleUrl(u);
+      });
+      childWindow.webContents.on('did-navigate', (_ev, u) => {
+        maybeHandleUrl(u);
+      });
+      childWindow.webContents.on('did-navigate-in-page', (_ev, u) => {
+        maybeHandleUrl(u);
+      });
+    } catch {
+      // ignore
+    }
   });
 
   contents.on('context-menu', (_event, params) => {
@@ -637,6 +1001,142 @@ ipcMain.handle('window-close', () => {
 ipcMain.handle('is-window-maximized', () => {
   const win = BrowserWindow.getFocusedWindow();
   return win ? win.isMaximized() : false;
+});
+
+ipcMain.handle('ext-storage-get', (_e, { extensionId, areaName, keys }) => {
+  const profileId = getCurrentProfileId();
+  const id = extensionId ? String(extensionId) : '';
+  const area = areaName ? String(areaName) : 'local';
+  if (!id) return {};
+
+  const st = getExtensionStorageStore(profileId, id);
+  const norm = normalizeStorageKeysArg(keys);
+
+  if (norm.mode === 'all') {
+    try {
+      return st.store || {};
+    } catch {
+      return {};
+    }
+  }
+
+  if (norm.mode === 'list') {
+    const out = {};
+    (norm.keys || []).forEach((k) => {
+      try {
+        out[k] = st.get(`${area}.${k}`);
+      } catch {
+        out[k] = undefined;
+      }
+    });
+    return out;
+  }
+
+  if (norm.mode === 'defaults') {
+    const out = {};
+    const defs = norm.defaults || {};
+    Object.keys(defs).forEach((k) => {
+      try {
+        const v = st.get(`${area}.${k}`);
+        out[k] = v === undefined ? defs[k] : v;
+      } catch {
+        out[k] = defs[k];
+      }
+    });
+    return out;
+  }
+
+  return {};
+});
+
+ipcMain.handle('ext-storage-set', (_e, { extensionId, areaName, items }) => {
+  const profileId = getCurrentProfileId();
+  const id = extensionId ? String(extensionId) : '';
+  const area = areaName ? String(areaName) : 'local';
+  if (!id) return true;
+
+  const st = getExtensionStorageStore(profileId, id);
+  const safe = items && typeof items === 'object' ? items : {};
+  const prev = {};
+  const next = {};
+  Object.keys(safe).forEach((k) => {
+    try {
+      prev[k] = st.get(`${area}.${k}`);
+    } catch {
+      prev[k] = undefined;
+    }
+    next[k] = safe[k];
+    try {
+      st.set(`${area}.${k}`, safe[k]);
+    } catch {
+      // ignore
+    }
+  });
+
+  const changes = buildStorageChanges(prev, next);
+  if (changes && Object.keys(changes).length > 0) {
+    broadcastToAllWindows('ext-storage-changed', { extensionId: id, areaName: area, changes });
+  }
+  return true;
+});
+
+ipcMain.handle('ext-storage-remove', (_e, { extensionId, areaName, keys }) => {
+  const profileId = getCurrentProfileId();
+  const id = extensionId ? String(extensionId) : '';
+  const area = areaName ? String(areaName) : 'local';
+  if (!id) return true;
+
+  const st = getExtensionStorageStore(profileId, id);
+  const norm = normalizeStorageKeysArg(keys);
+  const list = norm.mode === 'list' ? (norm.keys || []) : [];
+  const prev = {};
+  const next = {};
+  list.forEach((k) => {
+    try {
+      prev[k] = st.get(`${area}.${k}`);
+    } catch {
+      prev[k] = undefined;
+    }
+    next[k] = undefined;
+    try {
+      st.delete(`${area}.${k}`);
+    } catch {
+      // ignore
+    }
+  });
+
+  const changes = buildStorageChanges(prev, next);
+  if (changes && Object.keys(changes).length > 0) {
+    broadcastToAllWindows('ext-storage-changed', { extensionId: id, areaName: area, changes });
+  }
+  return true;
+});
+
+ipcMain.handle('ext-storage-clear', (_e, { extensionId, areaName }) => {
+  const profileId = getCurrentProfileId();
+  const id = extensionId ? String(extensionId) : '';
+  const area = areaName ? String(areaName) : 'local';
+  if (!id) return true;
+
+  const st = getExtensionStorageStore(profileId, id);
+  let prev = {};
+  try {
+    prev = st.get(area, {});
+  } catch {
+    prev = {};
+  }
+  try {
+    st.delete(area);
+  } catch {
+    // ignore
+  }
+
+  const next = {};
+  const changes = buildStorageChanges(prev, next);
+  if (changes && Object.keys(changes).length > 0) {
+    broadcastToAllWindows('ext-storage-changed', { extensionId: id, areaName: area, changes });
+  }
+  return true;
 });
 
 // Navigation handlers
@@ -803,9 +1303,8 @@ ipcMain.handle('profiles-switch', (e, profileId) => {
   if (!exists) return false;
   getGlobalStore().set('profiles.currentId', profileId);
 
-  const partition = `persist:blynx-${profileId}`;
-  const ses = session.fromPartition(partition);
-  registerBlynxProtocolForSession(ses);
+  getProfileSession(profileId);
+  loadPersistedExtensionsForProfile(profileId).catch(() => {});
 
   if (mainWindow) {
     mainWindow.webContents.send('profile-changed', profileId);
@@ -815,10 +1314,289 @@ ipcMain.handle('profiles-switch', (e, profileId) => {
 });
 
 ipcMain.handle('ensure-profile-session', (e, profileId) => {
-  const partition = `persist:blynx-${profileId}`;
-  const ses = session.fromPartition(partition);
-  registerBlynxProtocolForSession(ses);
+  const partition = getProfilePartition(profileId);
+  getProfileSession(profileId);
+  loadPersistedExtensionsForProfile(profileId).catch(() => {});
   return partition;
+});
+
+ipcMain.handle('extensions-list', () => {
+  const profileId = getCurrentProfileId();
+  const ses = getProfileSession(profileId);
+  const exts = ses.getAllExtensions ? ses.getAllExtensions() : new Map();
+  const out = [];
+  try {
+    for (const ext of exts.values()) {
+      if (!ext) continue;
+      out.push({
+        id: ext.id,
+        name: ext.name,
+        version: ext.version,
+        path: ext.path
+      });
+    }
+  } catch {
+    // ignore
+  }
+  return out;
+});
+
+ipcMain.handle('extensions-metadata', () => {
+  const profileId = getCurrentProfileId();
+  return getExtensionsMetadataForProfile(profileId);
+});
+
+ipcMain.handle('extensions-pinned-get', () => {
+  const profileId = getCurrentProfileId();
+  const s = getProfileStore(profileId);
+  const ids = s.get('extensions.pinned', []);
+  return Array.isArray(ids) ? ids.filter(v => typeof v === 'string' && v.length > 0) : [];
+});
+
+ipcMain.handle('extensions-pinned-set', (_e, ids) => {
+  const profileId = getCurrentProfileId();
+  const s = getProfileStore(profileId);
+  const safe = Array.isArray(ids)
+    ? ids.map(v => (typeof v === 'string' ? v.trim() : '')).filter(Boolean)
+    : [];
+  s.set('extensions.pinned', safe);
+  broadcastToAllWindows('extensions-pinned-changed', { profileId, ids: safe });
+  return safe;
+});
+
+ipcMain.handle('extensions-open-popup', async (_e, { extensionId, anchorRect }) => {
+  const profileId = getCurrentProfileId();
+  const id = extensionId ? String(extensionId) : '';
+  if (!id) return { ok: false };
+
+  const meta = getExtensionsMetadataForProfile(profileId).find(e => e.id === id);
+  if (!meta || !meta.popupPath) return { ok: false, error: 'Extension has no popup' };
+
+  const hostWin = BrowserWindow.getFocusedWindow();
+  if (!hostWin) return { ok: false };
+
+  closeExtensionPopupWindow();
+
+  const popupUrl = `chrome-extension://${id}/${meta.popupPath.replace(/^\/+/, '')}`;
+
+  const winBounds = hostWin.getBounds();
+  const ar = anchorRect && typeof anchorRect === 'object' ? anchorRect : null;
+  const ax = ar && Number.isFinite(ar.x) ? ar.x : 0;
+  const ay = ar && Number.isFinite(ar.y) ? ar.y : 0;
+  const aw = ar && Number.isFinite(ar.width) ? ar.width : 0;
+
+  const width = 360;
+  const height = 520;
+  const x = Math.max(winBounds.x + 8, Math.min(winBounds.x + winBounds.width - width - 8, winBounds.x + ax + aw - width));
+  const y = Math.max(winBounds.y + 8, winBounds.y + ay + 42);
+
+  extensionPopupWindow = new BrowserWindow({
+    width,
+    height,
+    x,
+    y,
+    frame: false,
+    resizable: false,
+    movable: false,
+    show: false,
+    parent: hostWin,
+    modal: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    backgroundColor: '#ffffff',
+    webPreferences: {
+      partition: getProfilePartition(profileId),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false
+    }
+  });
+
+  extensionPopupWindow.webContents.on('before-input-event', (_ev, input) => {
+    try {
+      if (input && input.type === 'keyDown' && input.key === 'Escape') {
+        closeExtensionPopupWindow();
+      }
+    } catch {
+      // ignore
+    }
+  });
+
+  extensionPopupWindow.on('blur', () => {
+    // Delay slightly so clicks inside the popup don't immediately close it due to focus churn.
+    setTimeout(() => {
+      try {
+        if (!extensionPopupWindow || extensionPopupWindow.isDestroyed()) return;
+        if (extensionPopupWindow.isFocused()) return;
+        closeExtensionPopupWindow();
+      } catch {
+        // ignore
+      }
+    }, 150);
+  });
+
+  const didFailLoad = new Promise((resolve) => {
+    try {
+      extensionPopupWindow.webContents.once('did-fail-load', (_e2, errorCode, errorDescription, validatedURL) => {
+        resolve({ errorCode, errorDescription, validatedURL });
+      });
+    } catch {
+      resolve(null);
+    }
+  });
+
+  try {
+    await extensionPopupWindow.loadURL(popupUrl);
+  } catch (err) {
+    try {
+      if (extensionPopupWindow && !extensionPopupWindow.isDestroyed()) {
+        extensionPopupWindow.close();
+      }
+    } catch {
+      // ignore
+    }
+    extensionPopupWindow = null;
+    return { ok: false, error: String(err && err.message ? err.message : err) };
+  }
+
+  try {
+    const fail = await Promise.race([
+      didFailLoad,
+      new Promise((resolve) => setTimeout(() => resolve(null), 0))
+    ]);
+    if (fail && fail.errorCode) {
+      closeExtensionPopupWindow();
+      return { ok: false, error: `${fail.errorDescription || 'did-fail-load'} (${fail.errorCode})`, url: fail.validatedURL };
+    }
+  } catch {
+    // ignore
+  }
+
+  try {
+    if (extensionPopupWindow && !extensionPopupWindow.isDestroyed()) {
+      extensionPopupWindow.show();
+    }
+  } catch {
+    // ignore
+  }
+
+  return { ok: true };
+});
+
+ipcMain.handle('extensions-install-unpacked', async () => {
+  const win = BrowserWindow.getFocusedWindow();
+  const result = await dialog.showOpenDialog(win || undefined, {
+    title: 'Load unpacked extension',
+    properties: ['openDirectory']
+  });
+  if (result.canceled) return { ok: false, canceled: true };
+  const dir = result.filePaths && result.filePaths[0] ? String(result.filePaths[0]) : '';
+  if (!dir) return { ok: false, canceled: true };
+
+  const profileId = getCurrentProfileId();
+  const ses = getProfileSession(profileId);
+
+  const ext = await ses.loadExtension(dir, { allowFileAccess: true });
+
+  const s = getProfileStore(profileId);
+  const existing = s.get('extensions.paths', []);
+  const next = Array.isArray(existing) ? existing.slice() : [];
+  if (!next.includes(dir)) {
+    next.push(dir);
+    s.set('extensions.paths', next);
+  }
+
+  broadcastToAllWindows('extensions-changed', { profileId });
+
+  return {
+    ok: true,
+    extension: {
+      id: ext.id,
+      name: ext.name,
+      version: ext.version,
+      path: ext.path
+    }
+  };
+});
+
+ipcMain.handle('extensions-install-crx', async () => {
+  const win = BrowserWindow.getFocusedWindow();
+  const result = await dialog.showOpenDialog(win || undefined, {
+    title: 'Install extension from CRX',
+    properties: ['openFile'],
+    filters: [
+      { name: 'Chrome Extension', extensions: ['crx'] },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  });
+  if (result.canceled) return { ok: false, canceled: true };
+  const filePath = result.filePaths && result.filePaths[0] ? String(result.filePaths[0]) : '';
+  if (!filePath) return { ok: false, canceled: true };
+
+  const profileId = getCurrentProfileId();
+  const buf = fs.readFileSync(filePath);
+  const ext = await installExtensionFromCrxBuffer({ profileId, crxBuffer: buf });
+
+  broadcastToAllWindows('extensions-changed', { profileId });
+  return { ok: true, extension: ext };
+});
+
+ipcMain.handle('extensions-install-webstore-url', async (_e, urlOrId) => {
+  const profileId = getCurrentProfileId();
+  const id = extractExtensionIdFromWebStoreUrl(urlOrId);
+  if (!id) {
+    return { ok: false, error: 'Could not extract extension id from URL' };
+  }
+
+  const crxUrl = `https://clients2.google.com/service/update2/crx?response=redirect&prodversion=120.0.0.0&acceptformat=crx2,crx3&x=id%3D${id}%26installsource%3Dondemand%26uc`;
+  const buf = await downloadToBuffer(crxUrl);
+  const ext = await installExtensionFromCrxBuffer({ profileId, crxBuffer: buf, suggestedId: id });
+  broadcastToAllWindows('extensions-changed', { profileId });
+  return { ok: true, extension: ext };
+});
+
+ipcMain.handle('extensions-remove', async (_e, extensionId) => {
+  const id = extensionId ? String(extensionId) : '';
+  if (!id) return { ok: false };
+
+  const profileId = getCurrentProfileId();
+  const ses = getProfileSession(profileId);
+
+  let ext = null;
+  try {
+    ext = ses.getExtension ? ses.getExtension(id) : null;
+  } catch {
+    ext = null;
+  }
+
+  try {
+    if (ses.removeExtension) {
+      ses.removeExtension(id);
+    }
+  } catch {
+    // ignore
+  }
+
+  const s = getProfileStore(profileId);
+  const existing = s.get('extensions.paths', []);
+  if (ext && ext.path && Array.isArray(existing)) {
+    const next = existing.filter(p => p !== ext.path);
+    s.set('extensions.paths', next);
+  }
+
+  // Remove from pinned list if present
+  try {
+    const pinned = s.get('extensions.pinned', []);
+    if (Array.isArray(pinned) && pinned.includes(id)) {
+      s.set('extensions.pinned', pinned.filter(x => x !== id));
+    }
+  } catch {
+    // ignore
+  }
+
+  broadcastToAllWindows('extensions-changed', { profileId });
+
+  return { ok: true };
 });
 
 // Search engine handler

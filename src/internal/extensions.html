@@ -269,6 +269,48 @@
     .btn-primary:hover {
       background: #9bbffd;
     }
+
+    .top-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 14px;
+    }
+
+    .btn-danger {
+      background: #ea4335;
+      color: #fff;
+    }
+
+    .btn-danger:hover {
+      background: #f0665b;
+    }
+
+    .muted {
+      color: #9aa0a6;
+      font-size: 13px;
+    }
+
+    .install-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+
+    .input {
+      flex: 1;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid #35363a;
+      background: #202124;
+      color: #e8eaed;
+      font-size: 13px;
+      outline: none;
+    }
+
+    .input:focus {
+      border-color: #8ab4f8;
+    }
   </style>
 </head>
 <body>
@@ -299,17 +341,21 @@
 
     <div class="installed-extensions">
       <h3 class="section-title">Installed Extensions</h3>
+      <div class="top-actions">
+        <button class="btn btn-primary" id="loadUnpackedBtn">Load unpacked</button>
+      </div>
+
+      <div class="install-row">
+        <button class="btn btn-primary" id="installCrxBtn">Install CRX</button>
+        <input class="input" id="webStoreUrlInput" placeholder="Chrome Web Store URL or extension ID" spellcheck="false" autocomplete="off">
+        <button class="btn btn-primary" id="installWebStoreBtn">Install</button>
+      </div>
+
       <div class="extension-list">
-        <div class="empty-extensions">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <rect x="3" y="3" width="7" height="7"/>
-            <rect x="14" y="3" width="7" height="7"/>
-            <rect x="14" y="14" width="7" height="7"/>
-            <rect x="3" y="14" width="7" height="7"/>
-          </svg>
-          <h3>No extensions installed</h3>
-          <p>Browse the extension gallery to find useful tools</p>
-        </div>
+        <div id="extensionsList"></div>
+      </div>
+      <div class="muted" style="margin-top:10px;">
+        Extensions are loaded per profile.
       </div>
     </div>
 
@@ -365,11 +411,176 @@
   </div>
 
   <script>
-    // Extension toggle functionality
-    document.querySelectorAll('.extension-toggle').forEach(toggle => {
-      toggle.addEventListener('click', () => {
-        toggle.classList.toggle('active');
-      });
+    const listEl = document.getElementById('extensionsList');
+    const loadBtn = document.getElementById('loadUnpackedBtn');
+    const installCrxBtn = document.getElementById('installCrxBtn');
+    const webStoreUrlInput = document.getElementById('webStoreUrlInput');
+    const installWebStoreBtn = document.getElementById('installWebStoreBtn');
+
+    const getPinnedIds = async () => {
+      try {
+        if (!window.electronAPI || !window.electronAPI.extensionsPinnedGet) return [];
+        const ids = await window.electronAPI.extensionsPinnedGet();
+        return Array.isArray(ids) ? ids : [];
+      } catch {
+        return [];
+      }
+    };
+
+    const setPinnedIds = async (ids) => {
+      try {
+        if (!window.electronAPI || !window.electronAPI.extensionsPinnedSet) return [];
+        const next = await window.electronAPI.extensionsPinnedSet(ids);
+        return Array.isArray(next) ? next : [];
+      } catch {
+        return [];
+      }
+    };
+
+    const escapeHtml = (s) => String(s || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+    const renderEmpty = () => {
+      listEl.innerHTML = `
+        <div class="empty-extensions">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="3" y="3" width="7" height="7"/>
+            <rect x="14" y="3" width="7" height="7"/>
+            <rect x="14" y="14" width="7" height="7"/>
+            <rect x="3" y="14" width="7" height="7"/>
+          </svg>
+          <h3>No extensions installed</h3>
+          <p>Load an unpacked Chrome extension folder to get started</p>
+        </div>
+      `;
+    };
+
+    const renderExtensions = async (exts) => {
+      if (!Array.isArray(exts) || exts.length === 0) {
+        renderEmpty();
+        return;
+      }
+
+      const pinnedIds = await getPinnedIds();
+
+      listEl.innerHTML = exts.map((ext) => {
+        const name = escapeHtml(ext.name || ext.id);
+        const desc = escapeHtml(ext.id || '');
+        const version = escapeHtml(ext.version || '');
+        const id = escapeHtml(ext.id || '');
+        const isPinned = pinnedIds.includes(ext.id);
+        return `
+          <div class="extension-item" data-ext-id="${id}">
+            <div class="extension-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="7"/>
+                <rect x="14" y="3" width="7" height="7"/>
+                <rect x="14" y="14" width="7" height="7"/>
+                <rect x="3" y="14" width="7" height="7"/>
+              </svg>
+            </div>
+            <div class="extension-info">
+              <div class="extension-name">${name}</div>
+              <div class="extension-description">${desc}</div>
+              <div class="extension-version">${version ? 'v' + version : ''}</div>
+            </div>
+            <button class="btn btn-primary" data-pin="1">${isPinned ? 'Unpin' : 'Pin'}</button>
+            <button class="btn btn-danger" data-remove="1">Remove</button>
+          </div>
+        `;
+      }).join('');
+    };
+
+    const refresh = async () => {
+      try {
+        if (!window.electronAPI || !window.electronAPI.extensionsList) {
+          renderEmpty();
+          return;
+        }
+        const exts = await window.electronAPI.extensionsList();
+        await renderExtensions(exts);
+      } catch (e) {
+        renderEmpty();
+      }
+    };
+
+    loadBtn.addEventListener('click', async () => {
+      try {
+        const res = await window.electronAPI.extensionsInstallUnpacked();
+        if (res && res.ok) {
+          await refresh();
+        }
+      } catch (e) {
+        // ignore
+      }
+    });
+
+    installCrxBtn.addEventListener('click', async () => {
+      try {
+        const res = await window.electronAPI.extensionsInstallCrx();
+        if (res && res.ok) {
+          await refresh();
+        }
+      } catch (e) {
+        // ignore
+      }
+    });
+
+    const installFromWebStoreInput = async () => {
+      const v = String(webStoreUrlInput.value || '').trim();
+      if (!v) return;
+      try {
+        const res = await window.electronAPI.extensionsInstallWebStoreUrl(v);
+        if (res && res.ok) {
+          webStoreUrlInput.value = '';
+          await refresh();
+        } else if (res && res.error) {
+          alert(res.error);
+        }
+      } catch (e) {
+        // ignore
+      }
+    };
+
+    installWebStoreBtn.addEventListener('click', installFromWebStoreInput);
+    webStoreUrlInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        installFromWebStoreInput();
+      }
+    });
+
+    listEl.addEventListener('click', async (e) => {
+      const btn = e.target.closest('button[data-remove="1"]');
+      if (!btn) return;
+      const row = btn.closest('.extension-item');
+      const extId = row ? row.getAttribute('data-ext-id') : '';
+      if (!extId) return;
+      try {
+        await window.electronAPI.extensionsRemove(extId);
+      } catch (err) {
+        // ignore
+      }
+      await refresh();
+    });
+
+    listEl.addEventListener('click', async (e) => {
+      const btn = e.target.closest('button[data-pin="1"]');
+      if (!btn) return;
+      const row = btn.closest('.extension-item');
+      const extId = row ? row.getAttribute('data-ext-id') : '';
+      if (!extId) return;
+      const pinned = await getPinnedIds();
+      if (pinned.includes(extId)) {
+        await setPinnedIds(pinned.filter(x => x !== extId));
+      } else {
+        await setPinnedIds(pinned.concat([extId]));
+      }
+      await refresh();
     });
 
     // Recommended card clicks
@@ -378,6 +589,8 @@
         alert('Extension gallery coming soon!');
       });
     });
+
+    refresh();
   </script>
 </body>
 </html>

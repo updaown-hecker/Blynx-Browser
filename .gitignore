@@ -20,9 +20,8 @@ release/
 coverage/
 
 # Electron / app generated data
-userdata/
 src/userdata/
 
-# Env
+# Env (nothing actually used but just in case)
 .env
 .env.*

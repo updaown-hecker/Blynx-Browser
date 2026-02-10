@@ -24,6 +24,8 @@ class BrowserController {
     this.bookmarksContainer = document.getElementById('bookmarksContainer');
     this.bookmarkBar = document.getElementById('bookmarkBar');
     this.bookmarkContextMenu = null;
+    this.extensionsToolbar = document.getElementById('extensionsToolbar');
+    this.extensionsContextMenu = null;
 
     this.profileSelectMain = document.getElementById('profileSelectMain');
     this.profileAddBtn = document.getElementById('profileAddBtn');
@@ -259,8 +261,23 @@ class BrowserController {
     });
 
     // Tab controls
-    document.getElementById('newTabBtn').addEventListener('click', () => {
+    const newTabBtn = document.getElementById('newTabBtn');
+    newTabBtn.addEventListener('click', () => {
       this.createTab('blynx://newtab');
+    });
+
+    // Allow dropping links onto the new tab button to open them in a new tab
+    newTabBtn.addEventListener('dragover', (e) => {
+      if (this.draggingTabId) return;
+      const u = this.normalizeDroppedUrl(this.extractUrlFromDataTransfer(e.dataTransfer));
+      if (u) e.preventDefault();
+    });
+    newTabBtn.addEventListener('drop', (e) => {
+      if (this.draggingTabId) return;
+      const u = this.normalizeDroppedUrl(this.extractUrlFromDataTransfer(e.dataTransfer));
+      if (!u) return;
+      e.preventDefault();
+      this.createTab(u, true);
     });
 
     // Navigation controls
@@ -488,6 +505,15 @@ class BrowserController {
         } catch (err) {
           console.error('Failed to claim dragged tab:', err);
         }
+        return;
+      }
+
+      // If it's not a dragged Blynx tab, treat it as a dropped URL and open in a new tab
+      if (!this.draggingTabId) {
+        const u = this.normalizeDroppedUrl(this.extractUrlFromDataTransfer(e.dataTransfer));
+        if (u) {
+          this.createTab(u, true);
+        }
       }
     });
 
@@ -631,6 +657,18 @@ class BrowserController {
       // Recreate webviews with the new partition
       window.location.reload();
     });
+
+    if (window.electronAPI.onExtensionsChanged) {
+      window.electronAPI.onExtensionsChanged(() => {
+        this.refreshExtensionsToolbar().catch(() => {});
+      });
+    }
+
+    if (window.electronAPI.onExtensionsPinnedChanged) {
+      window.electronAPI.onExtensionsPinnedChanged(() => {
+        this.refreshExtensionsToolbar().catch(() => {});
+      });
+    }
   }
 
   async loadSettings() {
@@ -641,6 +679,153 @@ class BrowserController {
     this.updateBookmarkBarVisibility();
     await this.renderBookmarkBar();
     await this.loadProfilesUi();
+    this.refreshExtensionsToolbar().catch(() => {});
+  }
+
+  ensureExtensionsContextMenu() {
+    if (this.extensionsContextMenu) return;
+
+    const menu = document.createElement('div');
+    menu.style.position = 'fixed';
+    menu.style.zIndex = '2500';
+    menu.style.minWidth = '180px';
+    menu.style.background = 'var(--bg-secondary)';
+    menu.style.border = '1px solid var(--bg-tertiary)';
+    menu.style.borderRadius = '8px';
+    menu.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.35)';
+    menu.style.padding = '6px 0';
+    menu.style.display = 'none';
+    document.body.appendChild(menu);
+    this.extensionsContextMenu = menu;
+
+    document.addEventListener('click', () => this.hideExtensionsContextMenu());
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') this.hideExtensionsContextMenu();
+    });
+  }
+
+  hideExtensionsContextMenu() {
+    if (this.extensionsContextMenu) {
+      this.extensionsContextMenu.style.display = 'none';
+      this.extensionsContextMenu.innerHTML = '';
+    }
+  }
+
+  addExtensionsContextMenuItem(label, onClick, danger = false) {
+    const item = document.createElement('div');
+    item.textContent = label;
+    item.style.padding = '10px 14px';
+    item.style.fontSize = '13px';
+    item.style.cursor = 'pointer';
+    item.style.userSelect = 'none';
+    item.style.color = danger ? 'var(--accent-red)' : 'var(--text-primary)';
+    item.addEventListener('mouseenter', () => {
+      item.style.background = 'var(--bg-hover)';
+    });
+    item.addEventListener('mouseleave', () => {
+      item.style.background = 'transparent';
+    });
+    item.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.hideExtensionsContextMenu();
+      onClick();
+    });
+    this.extensionsContextMenu.appendChild(item);
+  }
+
+  async setPinnedExtensions(ids) {
+    try {
+      if (!window.electronAPI.extensionsPinnedSet) return;
+      await window.electronAPI.extensionsPinnedSet(ids);
+      await this.refreshExtensionsToolbar();
+    } catch {
+      // ignore
+    }
+  }
+
+  async refreshExtensionsToolbar() {
+    if (!this.extensionsToolbar) return;
+    if (!window.electronAPI || !window.electronAPI.extensionsPinnedGet || !window.electronAPI.extensionsMetadata) {
+      this.extensionsToolbar.innerHTML = '';
+      return;
+    }
+
+    const [pinned, meta] = await Promise.all([
+      window.electronAPI.extensionsPinnedGet(),
+      window.electronAPI.extensionsMetadata()
+    ]);
+
+    const pinnedIds = Array.isArray(pinned) ? pinned : [];
+    const byId = new Map((Array.isArray(meta) ? meta : []).map(m => [m.id, m]));
+    const items = pinnedIds.map(id => byId.get(id)).filter(Boolean);
+
+    this.extensionsToolbar.innerHTML = '';
+
+    items.forEach((ext) => {
+      const btn = document.createElement('button');
+      btn.className = 'extension-icon-btn';
+      btn.type = 'button';
+      btn.title = ext.name || ext.id;
+      btn.dataset.extensionId = ext.id;
+
+      if (ext.iconUrl) {
+        const img = document.createElement('img');
+        img.src = ext.iconUrl;
+        img.alt = '';
+        btn.appendChild(img);
+      } else {
+        btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>';
+      }
+
+      btn.addEventListener('click', async () => {
+        if (!window.electronAPI.extensionsOpenPopup) return;
+        const rect = btn.getBoundingClientRect();
+        await window.electronAPI.extensionsOpenPopup({
+          extensionId: ext.id,
+          anchorRect: {
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height
+          }
+        });
+      });
+
+      btn.addEventListener('contextmenu', async (e) => {
+        e.preventDefault();
+        this.ensureExtensionsContextMenu();
+        this.extensionsContextMenu.innerHTML = '';
+
+        this.addExtensionsContextMenuItem('Unpin', async () => {
+          const next = pinnedIds.filter(x => x !== ext.id);
+          await this.setPinnedExtensions(next);
+        });
+
+        this.addExtensionsContextMenuItem('Remove', async () => {
+          try {
+            if (window.electronAPI.extensionsRemove) {
+              await window.electronAPI.extensionsRemove(ext.id);
+            }
+          } catch {
+            // ignore
+          }
+          await this.refreshExtensionsToolbar();
+        }, true);
+
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        this.extensionsContextMenu.style.left = '0px';
+        this.extensionsContextMenu.style.top = '0px';
+        this.extensionsContextMenu.style.display = 'block';
+        const mrect = this.extensionsContextMenu.getBoundingClientRect();
+        const left = Math.min(e.clientX, vw - mrect.width - 8);
+        const top = Math.min(e.clientY, vh - mrect.height - 8);
+        this.extensionsContextMenu.style.left = left + 'px';
+        this.extensionsContextMenu.style.top = top + 'px';
+      });
+
+      this.extensionsToolbar.appendChild(btn);
+    });
   }
 
   async loadProfilesUi() {

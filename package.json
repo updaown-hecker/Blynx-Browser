@@ -25,7 +25,8 @@
     "electron-builder": "^24.9.1"
   },
   "dependencies": {
-    "electron-store": "^8.1.0"
+    "electron-store": "^8.1.0",
+    "extract-zip": "^2.0.1"
   },
   "build": {
     "appId": "com.blynx.browser",

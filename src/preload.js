@@ -52,6 +52,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   profilesSwitch: (profileId) => ipcRenderer.invoke('profiles-switch', profileId),
   ensureProfileSession: (profileId) => ipcRenderer.invoke('ensure-profile-session', profileId),
 
+  // Extensions
+  extensionsList: () => ipcRenderer.invoke('extensions-list'),
+  extensionsMetadata: () => ipcRenderer.invoke('extensions-metadata'),
+  extensionsInstallUnpacked: () => ipcRenderer.invoke('extensions-install-unpacked'),
+  extensionsInstallCrx: () => ipcRenderer.invoke('extensions-install-crx'),
+  extensionsInstallWebStoreUrl: (urlOrId) => ipcRenderer.invoke('extensions-install-webstore-url', urlOrId),
+  extensionsRemove: (extensionId) => ipcRenderer.invoke('extensions-remove', extensionId),
+  extensionsPinnedGet: () => ipcRenderer.invoke('extensions-pinned-get'),
+  extensionsPinnedSet: (ids) => ipcRenderer.invoke('extensions-pinned-set', ids),
+  extensionsOpenPopup: (payload) => ipcRenderer.invoke('extensions-open-popup', payload),
+
   // Event listeners
   onNewTab: (callback) => ipcRenderer.on('new-tab', (e, url) => callback(url)),
   onNewTabBackground: (callback) => ipcRenderer.on('new-tab-background', (e, url) => callback(url)),
@@ -67,6 +78,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onNavigateTo: (callback) => ipcRenderer.on('navigate-to', (e, url) => callback(url)),
   onMaximizeChange: (callback) => ipcRenderer.on('maximize-change', callback),
   onProfileChanged: (callback) => ipcRenderer.on('profile-changed', (e, profileId) => callback(profileId)),
+  onExtensionsChanged: (callback) => ipcRenderer.on('extensions-changed', (_e, payload) => callback(payload)),
+  onExtensionsPinnedChanged: (callback) => ipcRenderer.on('extensions-pinned-changed', (_e, payload) => callback(payload)),
 
   // Tab drag / tear-off
   tabDragStart: (payload) => ipcRenderer.send('tab-drag-start', payload),

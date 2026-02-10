@@ -41,5 +41,15 @@ if (isInternalPage) {
     profilesCurrent: () => ipcRenderer.invoke('profiles-current'),
     profilesCreate: (name) => ipcRenderer.invoke('profiles-create', name),
     profilesSwitch: (profileId) => ipcRenderer.invoke('profiles-switch', profileId),
+
+    // Extensions
+    extensionsList: () => ipcRenderer.invoke('extensions-list'),
+    extensionsMetadata: () => ipcRenderer.invoke('extensions-metadata'),
+    extensionsInstallUnpacked: () => ipcRenderer.invoke('extensions-install-unpacked'),
+    extensionsInstallCrx: () => ipcRenderer.invoke('extensions-install-crx'),
+    extensionsInstallWebStoreUrl: (urlOrId) => ipcRenderer.invoke('extensions-install-webstore-url', urlOrId),
+    extensionsRemove: (extensionId) => ipcRenderer.invoke('extensions-remove', extensionId),
+    extensionsPinnedGet: () => ipcRenderer.invoke('extensions-pinned-get'),
+    extensionsPinnedSet: (ids) => ipcRenderer.invoke('extensions-pinned-set', ids),
   });
 }
