@@ -18,7 +18,7 @@
     "internet",
     "blynx"
   ],
-  "author": "Blynx Team",
+  "author": "Blynx Team <updaowny@gmail.com>",
   "license": "MIT",
   "devDependencies": {
     "electron": "^28.0.0",
@@ -49,10 +49,11 @@
     },
     "mac": {
       "category": "public.app-category.utilities",
-      "icon": "src/assets/App-icon.png"
+      "icon": "src/assets/App-icon.png",
+      "target": ["zip"]
     },
     "linux": {
-      "target": "AppImage",
+      "target": ["deb", "zip"],
       "icon": "src/assets/App-icon.png"
     }
 }
