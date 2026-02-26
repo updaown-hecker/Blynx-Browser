@@ -34,6 +34,8 @@ class BrowserController {
     this._tabDragOverId = null;
     this._tabDragDidDropInThisWindow = false;
 
+    this._draggedLinkUrl = null;
+
     this._persistSessionTabsTimer = null;
     this._historyTabReloadTimer = null;
 
@@ -49,6 +51,19 @@ class BrowserController {
       if (uriList) {
         const first = uriList.split(/\r?\n/).find(l => l && !l.startsWith('#'));
         if (first) return first.trim();
+      }
+      const url = dt.getData('URL');
+      if (url && url.trim()) return url.trim();
+      const moz = dt.getData('text/x-moz-url');
+      if (moz && moz.trim()) {
+        // Often formatted as: "<url>\n<title>"
+        const first = moz.split(/\r?\n/)[0];
+        if (first && first.trim()) return first.trim();
+      }
+      const html = dt.getData('text/html');
+      if (html && html.trim()) {
+        const m = html.match(/href\s*=\s*"([^"]+)"/i) || html.match(/href\s*=\s*'([^']+)'/i);
+        if (m && m[1]) return String(m[1]).trim();
       }
       const plain = dt.getData('text/plain');
       if (plain && plain.trim()) return plain.trim();
@@ -66,11 +81,23 @@ class BrowserController {
     return url;
   }
 
+  getFallbackDraggedLinkUrl() {
+    try {
+      const u = this._draggedLinkUrl;
+      if (typeof u !== 'string') return null;
+      const trimmed = u.trim();
+      if (!trimmed) return null;
+      return this.normalizeDroppedUrl(trimmed);
+    } catch {
+      return null;
+    }
+  }
+
   sanitizeSessionUrl(url) {
     if (typeof url !== 'string') return null;
     const u = url.trim();
     if (!u) return null;
-    if (u === 'about:blank') return null;
+    if (u === 'about:blank' || u.startsWith('about:blank#') || u.startsWith('about:blank?')) return null;
     if (u === 'about:srcdoc') return null;
     if (u.includes('*')) return null;
     return u;
@@ -85,13 +112,68 @@ class BrowserController {
 
     tab.displayUrl = url;
 
+    const ensureReady = async () => {
+      try {
+        // In some cases, setting src too early results in the webview staying at about:blank
+        // until a later user action. Waiting for dom-ready makes navigation reliable.
+        if (webview.isLoading && typeof webview.isLoading === 'function') {
+          // If the webview API is available, we can assume it's attached.
+          return;
+        }
+      } catch {
+        // ignore
+      }
+
+      await new Promise((resolve) => {
+        let done = false;
+        const finish = () => {
+          if (done) return;
+          done = true;
+          try { webview.removeEventListener('dom-ready', finish); } catch {}
+          resolve();
+        };
+        try {
+          webview.addEventListener('dom-ready', finish);
+        } catch {
+          // ignore
+        }
+        setTimeout(finish, 800);
+      });
+    };
+
+    const loadUrlWithRetry = async (targetUrl) => {
+      // Webview sometimes rejects navigation if called before it's attached.
+      // Retry a few times; this fixes the "URL bar updates but page stays blank" issue.
+      const attempts = 6;
+      for (let i = 0; i < attempts; i += 1) {
+        await new Promise(r => setTimeout(r, i === 0 ? 0 : 60));
+        try {
+          await ensureReady();
+          if (typeof webview.loadURL === 'function') {
+            await webview.loadURL(targetUrl);
+            return true;
+          }
+          webview.setAttribute('src', targetUrl);
+          return true;
+        } catch {
+          // keep retrying
+        }
+      }
+      try {
+        webview.setAttribute('src', targetUrl);
+      } catch {
+        // ignore
+      }
+      return false;
+    };
+
     if (url.startsWith('view-source:')) {
       const target = url.slice('view-source:'.length).trim();
       if (target.startsWith('blynx://')) {
         return;
       }
       tab.actualUrl = `view-source:${target}`;
-      webview.setAttribute('src', `view-source:${target}`);
+      await loadUrlWithRetry(`view-source:${target}`);
       return;
     }
 
@@ -114,14 +196,14 @@ class BrowserController {
         if (this.internalPreloadPath) {
           webview.setAttribute('preload', this.internalPreloadPath);
         }
-        webview.setAttribute('src', fileUrl);
+        await loadUrlWithRetry(fileUrl);
       } catch (e) {
         console.error('Failed to get internal page URL:', e);
         webview.setAttribute('src', `data:text/html,<h1>Error loading page</h1><p>Could not load ${page}</p>`);
       }
     } else {
       tab.actualUrl = url;
-      webview.setAttribute('src', url);
+      await loadUrlWithRetry(url);
     }
   }
 
@@ -162,8 +244,18 @@ class BrowserController {
       this._persistSessionTabsTimer = setTimeout(() => {
         try {
           const urls = this.tabs
-            .map(t => t.displayUrl || t.url)
-            .filter(u => typeof u === 'string' && u.length > 0);
+            .map((t) => {
+              // Prefer a committed navigation URL (actualUrl/url) over displayUrl.
+              // displayUrl can temporarily be about:blank during webview setup.
+              return t.actualUrl || t.url || t.displayUrl;
+            })
+            .map(u => (typeof u === 'string' ? u.trim() : ''))
+            .filter((u) => {
+              if (!u) return false;
+              if (u === 'about:blank' || u.startsWith('about:blank#') || u.startsWith('about:blank?')) return false;
+              if (u === 'about:srcdoc') return false;
+              return true;
+            });
           // Fire-and-forget to avoid blocking UI
           window.electronAPI.profileStoreSet('session.tabs', urls);
         } catch (e) {
@@ -201,6 +293,14 @@ class BrowserController {
       this.internalPreloadPath = null;
     }
 
+    // Webview preload for normal web pages (enables link drag-out via ipc-message)
+    try {
+      this.webviewPreloadPath = await window.electronAPI.getWebviewPreloadPath();
+    } catch (e) {
+      console.error('Failed to load webview preload path:', e);
+      this.webviewPreloadPath = null;
+    }
+
     // Profiles must be ready before we create any webviews so cookies + storage persist
     await this.loadProfile();
     try {
@@ -211,7 +311,19 @@ class BrowserController {
 
     // Startup tabs
     try {
-      await this.restoreSessionOrOpenNewTab();
+      const qs = new URLSearchParams(window.location.search || '');
+      const initialUrl = (qs.get('initialUrl') || '').trim();
+      const skipRestore = (qs.get('skipRestore') || '').trim() === '1';
+
+      if (initialUrl) {
+        // When a tab is torn off into a new window, main passes the URL via query params.
+        // We must not also restore the previous session, or we'll create duplicates.
+        this.createTab(initialUrl, true);
+      } else if (skipRestore) {
+        this.createTab('blynx://newtab', true);
+      } else {
+        await this.restoreSessionOrOpenNewTab();
+      }
     } catch (e) {
       console.error('Failed during startup tab restore, opening new tab:', e);
       this.createTab('blynx://newtab');
@@ -269,14 +381,15 @@ class BrowserController {
     // Allow dropping links onto the new tab button to open them in a new tab
     newTabBtn.addEventListener('dragover', (e) => {
       if (this.draggingTabId) return;
-      const u = this.normalizeDroppedUrl(this.extractUrlFromDataTransfer(e.dataTransfer));
+      const u = this.normalizeDroppedUrl(this.extractUrlFromDataTransfer(e.dataTransfer)) || this.getFallbackDraggedLinkUrl();
       if (u) e.preventDefault();
     });
     newTabBtn.addEventListener('drop', (e) => {
       if (this.draggingTabId) return;
-      const u = this.normalizeDroppedUrl(this.extractUrlFromDataTransfer(e.dataTransfer));
+      const u = this.normalizeDroppedUrl(this.extractUrlFromDataTransfer(e.dataTransfer)) || this.getFallbackDraggedLinkUrl();
       if (!u) return;
       e.preventDefault();
+      this._draggedLinkUrl = null;
       this.createTab(u, true);
     });
 
@@ -320,13 +433,14 @@ class BrowserController {
 
     // Drag/drop links onto bookmark bar to create bookmarks
     this.bookmarkBar.addEventListener('dragover', (e) => {
-      const u = this.normalizeDroppedUrl(this.extractUrlFromDataTransfer(e.dataTransfer));
+      const u = this.normalizeDroppedUrl(this.extractUrlFromDataTransfer(e.dataTransfer)) || this.getFallbackDraggedLinkUrl();
       if (u) e.preventDefault();
     });
     this.bookmarkBar.addEventListener('drop', async (e) => {
       e.preventDefault();
-      const u = this.normalizeDroppedUrl(this.extractUrlFromDataTransfer(e.dataTransfer));
+      const u = this.normalizeDroppedUrl(this.extractUrlFromDataTransfer(e.dataTransfer)) || this.getFallbackDraggedLinkUrl();
       if (!u) return;
+      this._draggedLinkUrl = null;
       await window.electronAPI.addBookmark({
         title: u,
         url: u
@@ -473,7 +587,7 @@ class BrowserController {
     this.tabsContainer.addEventListener('dragover', (e) => {
       if (!this.draggingTabId) {
         // Allow dropping links to open a new tab
-        const u = this.normalizeDroppedUrl(this.extractUrlFromDataTransfer(e.dataTransfer));
+        const u = this.normalizeDroppedUrl(this.extractUrlFromDataTransfer(e.dataTransfer)) || this.getFallbackDraggedLinkUrl();
         if (u) {
           e.preventDefault();
         }
@@ -510,8 +624,9 @@ class BrowserController {
 
       // If it's not a dragged Blynx tab, treat it as a dropped URL and open in a new tab
       if (!this.draggingTabId) {
-        const u = this.normalizeDroppedUrl(this.extractUrlFromDataTransfer(e.dataTransfer));
+        const u = this.normalizeDroppedUrl(this.extractUrlFromDataTransfer(e.dataTransfer)) || this.getFallbackDraggedLinkUrl();
         if (u) {
+          this._draggedLinkUrl = null;
           this.createTab(u, true);
         }
       }
@@ -1134,8 +1249,16 @@ class BrowserController {
 
     if (activate) {
       this.activateTab(tabId);
-      // Navigate to the URL after activation
-      this.navigateTo(url);
+      // Navigate to the URL after activation.
+      // Delay one tick so the <webview> is attached; otherwise it can stay stuck on about:blank
+      // until a user action (e.g. pressing Enter).
+      setTimeout(() => {
+        try {
+          this.navigateTo(url);
+        } catch {
+          // ignore
+        }
+      }, 0);
     } else {
       // Fire-and-forget, but make sure async internal URL resolution runs
       this.loadUrlInTab(tabId, url).catch(e => console.error('Failed to load URL in background tab:', e));
@@ -1179,14 +1302,15 @@ class BrowserController {
     // Drop a URL on a tab to navigate that tab
     div.addEventListener('dragover', (e) => {
       if (this.draggingTabId) return;
-      const u = this.normalizeDroppedUrl(this.extractUrlFromDataTransfer(e.dataTransfer));
+      const u = this.normalizeDroppedUrl(this.extractUrlFromDataTransfer(e.dataTransfer)) || this.getFallbackDraggedLinkUrl();
       if (u) e.preventDefault();
     });
     div.addEventListener('drop', (e) => {
       if (this.draggingTabId) return;
-      const u = this.normalizeDroppedUrl(this.extractUrlFromDataTransfer(e.dataTransfer));
+      const u = this.normalizeDroppedUrl(this.extractUrlFromDataTransfer(e.dataTransfer)) || this.getFallbackDraggedLinkUrl();
       if (!u) return;
       e.preventDefault();
+      this._draggedLinkUrl = null;
       this.activateTab(tab.id);
       this.loadUrlInTab(tab.id, u);
     });
@@ -1219,7 +1343,15 @@ class BrowserController {
 
       try {
         window.electronAPI.tabDragStart({
-          url: tab.displayUrl || tab.url,
+          url: (() => {
+            try {
+              const wv = this.webviewContainer.querySelector(`[data-tab-id="${tab.id}"]`);
+              const current = wv && typeof wv.getURL === 'function' ? String(wv.getURL() || '') : '';
+              return current && !current.startsWith('about:blank') ? current : (tab.actualUrl || tab.url || tab.displayUrl);
+            } catch {
+              return tab.actualUrl || tab.url || tab.displayUrl;
+            }
+          })(),
           profileId: this.currentProfileId || null
         });
       } catch {
@@ -1252,7 +1384,16 @@ class BrowserController {
       // If it wasn't claimed by another window, tear it off into a new window
       const endedTab = this.tabs.find(t => t.id === endedTabId);
       if (!endedTab) return;
-      const u = endedTab.displayUrl || endedTab.url;
+      const u = (() => {
+        try {
+          const wv = this.webviewContainer.querySelector(`[data-tab-id="${endedTabId}"]`);
+          const current = wv && typeof wv.getURL === 'function' ? String(wv.getURL() || '') : '';
+          if (current && !current.startsWith('about:blank')) return current;
+        } catch {
+          // ignore
+        }
+        return endedTab.actualUrl || endedTab.url || endedTab.displayUrl;
+      })();
       try {
         await window.electronAPI.createWindowWithTab({
           url: u,
@@ -1304,7 +1445,9 @@ class BrowserController {
     webview.setAttribute('allowpopups', 'true');
     webview.setAttribute('partition', this.currentPartition);
     webview.setAttribute('webpreferences', 'contextIsolation=yes,nodeIntegration=no,webviewTag=yes');
-    if (this.internalPreloadPath) {
+    if (this.webviewPreloadPath) {
+      webview.setAttribute('preload', this.webviewPreloadPath);
+    } else if (this.internalPreloadPath) {
       webview.setAttribute('preload', this.internalPreloadPath);
     }
     webview.dataset.tabId = tabId;
@@ -1341,6 +1484,24 @@ class BrowserController {
 
     webview.addEventListener('context-menu', (e) => {
       // Handle context menu
+    });
+
+    // Receive messages from the webview preload (used for reliable link dragging)
+    webview.addEventListener('ipc-message', (e) => {
+      try {
+        const ch = e && e.channel ? String(e.channel) : '';
+        if (ch === 'blynx-link-drag-start') {
+          const payload = e.args && e.args[0] ? e.args[0] : null;
+          const u = payload && payload.url ? String(payload.url) : '';
+          const norm = this.normalizeDroppedUrl(u);
+          this._draggedLinkUrl = norm || null;
+        }
+        if (ch === 'blynx-link-drag-end') {
+          this._draggedLinkUrl = null;
+        }
+      } catch {
+        // ignore
+      }
     });
 
     return webview;
@@ -1465,6 +1626,15 @@ class BrowserController {
   handleDidNavigate(tabId, url, isInPage = false) {
     const tab = this.tabs.find(t => t.id === tabId);
     if (!tab) return;
+
+    // Do not let about:blank (and variants) overwrite the tab's real URL.
+    // These transient navigations commonly happen during webview setup and popups.
+    if (
+      typeof url === 'string' &&
+      (url === 'about:blank' || url.startsWith('about:blank#') || url.startsWith('about:blank?'))
+    ) {
+      return;
+    }
 
     // Map internal file URLs back to blynx:// for display purposes
     if (url.startsWith('file://') && url.includes('/internal/')) {

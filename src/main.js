@@ -796,8 +796,15 @@ function createMainWindow(opts = {}) {
     }
   });
 
-  // Load the browser UI
-  win.loadFile(path.join(__dirname, 'renderer', 'browser.html'));
+  // Load the browser UI (optionally with a startup URL)
+  const loadOpts = {};
+  if (initialUrl) {
+    loadOpts.query = {
+      initialUrl: String(initialUrl),
+      skipRestore: '1'
+    };
+  }
+  win.loadFile(path.join(__dirname, 'renderer', 'browser.html'), loadOpts);
 
   // Ensure Ctrl/Cmd+W closes the current tab (even when a webview has focus)
   const closeTabShortcutHandler = (event, input) => {
@@ -837,15 +844,8 @@ function createMainWindow(opts = {}) {
     mainWindow = win;
   }
 
-  if (initialUrl) {
-    win.webContents.once('did-finish-load', () => {
-      try {
-        win.webContents.send('new-tab', initialUrl);
-      } catch (_) {
-        // ignore
-      }
-    });
-  }
+  // NOTE: initialUrl is handled by the renderer via query params to avoid
+  // creating duplicate startup tabs.
 
   // Open DevTools in development
   if (isDev) {
@@ -887,6 +887,20 @@ app.on('window-all-closed', () => {
 });
 
 app.on('web-contents-created', (e, contents) => {
+  try {
+    contents.on('render-process-gone', (_ev, details) => {
+      try {
+        const reason = details && details.reason ? String(details.reason) : 'unknown';
+        const exitCode = details && typeof details.exitCode === 'number' ? details.exitCode : null;
+        console.error('[render-process-gone]', { id: contents.id, reason, exitCode });
+      } catch {
+        // ignore
+      }
+    });
+  } catch {
+    // ignore
+  }
+
   // Handle new windows
   contents.setWindowOpenHandler(({ url }) => {
     try {
@@ -899,7 +913,7 @@ app.on('web-contents-created', (e, contents) => {
 
       // Some OAuth/login flows begin with about:blank and only later navigate to the real URL.
       // Allow the blank child window to be created so we can capture its first real navigation.
-      if (u === 'about:blank') {
+      if (u === 'about:blank' || u.startsWith('about:blank#') || u.startsWith('about:blank?')) {
         return { action: 'allow' };
       }
 
@@ -930,7 +944,7 @@ app.on('web-contents-created', (e, contents) => {
       const maybeHandleUrl = (rawUrl) => {
         if (handled) return;
         const u = rawUrl ? String(rawUrl) : '';
-        if (!u || u === 'about:blank') return;
+        if (!u || u === 'about:blank' || u.startsWith('about:blank#') || u.startsWith('about:blank?')) return;
         if (u.startsWith('devtools://') || u.startsWith('chrome-devtools://')) return;
 
         handled = true;
@@ -943,7 +957,16 @@ app.on('web-contents-created', (e, contents) => {
       };
 
       childWindow.webContents.on('will-navigate', (ev, u) => {
-        try { ev.preventDefault(); } catch {}
+        try {
+          const next = u ? String(u) : '';
+          // Don't block initial about:blank navigations; many flows start there.
+          if (next === 'about:blank' || next.startsWith('about:blank#') || next.startsWith('about:blank?')) {
+            return;
+          }
+          ev.preventDefault();
+        } catch {
+          // ignore
+        }
         maybeHandleUrl(u);
       });
       childWindow.webContents.on('did-navigate', (_ev, u) => {
@@ -1605,7 +1628,8 @@ const searchEngines = {
   bing: 'https://www.bing.com/search?q=',
   duckduckgo: 'https://duckduckgo.com/?q=',
   yahoo: 'https://search.yahoo.com/search?p=',
-  brave: 'https://search.brave.com/search?q='
+  brave: 'https://search.brave.com/search?q=', 
+  BlynxSearch: 'https://blynx.vip/search?q='
 };
 
 ipcMain.handle('get-search-engine', () => {
@@ -1625,6 +1649,10 @@ ipcMain.handle('get-internal-page-url', (e, page) => {
 
 ipcMain.handle('get-internal-preload-path', () => {
   return path.join(__dirname, 'internal-preload.js');
+});
+
+ipcMain.handle('get-webview-preload-path', () => {
+  return path.join(__dirname, 'webview-preload.js');
 });
 
 // Handle setting changes from internal pages

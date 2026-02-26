@@ -44,6 +44,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSearchUrl: (query) => ipcRenderer.invoke('get-search-url', query),
   getInternalPageUrl: (page) => ipcRenderer.invoke('get-internal-page-url', page),
   getInternalPreloadPath: () => ipcRenderer.invoke('get-internal-preload-path'),
+  getWebviewPreloadPath: () => ipcRenderer.invoke('get-webview-preload-path'),
 
   // Profiles
   profilesList: () => ipcRenderer.invoke('profiles-list'),
